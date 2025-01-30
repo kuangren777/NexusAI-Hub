@@ -97,26 +97,166 @@ CREATE TABLE chat_stats (
 
 ## API接口文档
 
-### 提供商管理
-- `GET /providers`：获取所有提供商列表。
-- `POST /providers`：添加新提供商。
-- `PUT /providers/{provider_id}`：更新提供商信息。
-- `DELETE /providers/{provider_id}`：删除指定的提供商。
+### OpenAI 兼容接口
 
-### 模型管理
-- `GET /providers/{provider_id}/models`：获取指定提供商的模型列表。
-- `POST /provider_models`：添加新模型。
-- `PUT /provider_models/{model_id}`：更新指定模型信息。
-- `DELETE /provider_models/{model_id}`：删除指定模型。
+NexusAI Hub 提供了与 OpenAI API 格式兼容的接口，可以直接替换 OpenAI 的接口地址使用。
 
-### 对话接口
-- `WebSocket /ws/chat`：实时对话接口，支持 WebSocket 协议进行聊天。
-- `POST /v1/chat/completions`：标准对话接口，处理用户请求并返回模型的回答。
-- `POST /chat/completions`：兼容接口，支持旧版接口的兼容。
+#### 基础信息
+- 接口地址：`http://your-domain:8001`
+- 认证方式：Bearer Token（使用提供商的个性化密钥）
+- 请求格式：JSON
+- 响应格式：Stream 或 JSON
 
-### 统计接口
-- `GET /stats/conversation/{conversation_id}`：获取特定对话的统计信息。
-- `GET /stats/total`：获取总体的使用统计数据。
+#### Chat Completions API
+
+##### 1. 标准格式（OpenAI 兼容）
+```http
+POST /v1/chat/completions
+Authorization: Bearer YOUR_PERSONALIZED_KEY
+Content-Type: application/json
+
+{
+    "model": "MODEL_NAME",
+    "messages": [
+        {"role": "system", "content": "你是一个助手"},
+        {"role": "user", "content": "你好"}
+    ],
+    "temperature": 0.7,
+    "stream": true
+}
+```
+
+##### 2. 简化格式
+```http
+POST /chat/completions
+Authorization: Bearer YOUR_PERSONALIZED_KEY
+Content-Type: application/json
+
+{
+    "model": "MODEL_NAME",
+    "messages": [
+        {"role": "user", "content": "你好"}
+    ]
+}
+```
+
+#### 响应格式
+
+##### 流式响应 (stream=true)
+```json
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"！"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+```
+
+##### 非流式响应 (stream=false)
+```json
+{
+    "id": "chatcmpl-123",
+    "object": "chat.completion",
+    "created": 1694839621,
+    "model": "gpt-3.5-turbo-0613",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "你好！"
+            },
+            "finish_reason": "stop"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 10,
+        "completion_tokens": 3,
+        "total_tokens": 13
+    }
+}
+```
+
+#### 请求参数说明
+
+| 参数名 | 类型 | 必选 | 说明 |
+|--------|------|------|------|
+| model | string | 是 | 模型名称，需要在管理后台配置 |
+| messages | array | 是 | 对话消息数组 |
+| temperature | float | 否 | 温度参数，控制随机性，默认 0.7 |
+| stream | boolean | 否 | 是否使用流式响应，默认 true |
+
+#### 错误响应
+```json
+{
+    "error": {
+        "message": "错误信息",
+        "type": "invalid_request_error",
+        "code": "invalid_api_key"
+    }
+}
+```
+
+### 使用示例
+
+#### Python
+```python
+import openai
+
+openai.api_key = "YOUR_PERSONALIZED_KEY"
+openai.api_base = "http://your-domain:8001/v1"
+
+response = openai.ChatCompletion.create(
+    model="MODEL_NAME",
+    messages=[
+        {"role": "user", "content": "你好"}
+    ],
+    stream=True
+)
+
+for chunk in response:
+    if chunk and chunk.choices and chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+#### JavaScript
+```javascript
+const response = await fetch('http://your-domain:8001/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${YOUR_PERSONALIZED_KEY}`,
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        model: 'MODEL_NAME',
+        messages: [
+            { role: 'user', content: '你好' }
+        ],
+        stream: true
+    })
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n');
+    
+    for (const line of lines) {
+        if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            if (data.choices[0].delta.content) {
+                process.stdout.write(data.choices[0].delta.content);
+            }
+        }
+    }
+}
+```
 
 ## 特色功能
 
@@ -155,4 +295,4 @@ MIT License
 ## 联系方式
 - 项目维护者：kuangren
 - 邮箱：luomingyu2002@126.com
-- 项目地址：[GitHub Repository URL]
+- 项目地址：[\[GitHub Repository URL\]](https://github.com/kuangren777/NexusAI-Hub)
