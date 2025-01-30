@@ -1,0 +1,3052 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusAI Hub</title>
+    <style>
+        /* 根变量 - 浅色科技感配色方案 */
+        :root {
+            --primary-color: #00E5FF;  /* 亮青色 */
+            --secondary-color: #2D5AF0; /* 亮蓝色 */
+            --background-color: #F8F9FA; /* 亮色背景 */
+            --card-background: #FFFFFF; /* 白色卡片背景 */
+            --text-color: #1F2328; /* 深色文本 */
+            --text-secondary: #656D76; /* 次要文本 */
+            --border-color: #D0D7DE; /* 浅色边框 */
+            --header-height: 60px;
+            --success-color: #3FB950;
+            --error-color: #F85149;
+            --hover-color: #F6F8FA;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        /* 暗色主题的变量 */
+        [data-theme="dark"] {
+            --primary-color: #00E5FF;
+            --secondary-color: #00B8D4;
+            --background-color: #1a1a1a;
+            --card-background: #2d2d2d;
+            --text-color: #ffffff;
+            --text-secondary: #b0b0b0;
+            --border-color: #404040;
+            --hover-color: #363636;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.5;
+        }
+
+        /* 头部样式 */
+        .header {
+            background: var(--card-background);
+            height: var(--header-height);
+            border-bottom: 1px solid var(--border-color);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .header-content {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 20px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--primary-color), #2D5AF0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+            position: relative;
+            padding: 5px 0;
+        }
+
+        .logo::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+            animation: glow 2s linear infinite;
+        }
+
+        @keyframes glow {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        /* 主容器样式 */
+        .app-container {
+            margin-top: var(--header-height);
+            min-height: calc(100vh - var(--header-height));
+        }
+
+        .main-container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 400px;
+            gap: 24px;
+        }
+
+        /* 统一卡片样式 */
+        .module-card {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .module-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 229, 255, 0.1);
+        }
+
+        /* 统计卡片样式调整 */
+        .stats-card {
+            padding: 24px;
+        }
+
+        .stats-grid {
+            display: flex;  /* 改为 flex 布局 */
+            justify-content: space-between;  /* 在主轴上平均分配空间 */
+            align-items: center;  /* 在交叉轴上居中对齐 */
+            gap: 16px;  /* 减小间距 */
+        }
+
+        .stat-item {
+            flex: 1;  /* 让每个统计项平均分配空间 */
+            display: flex;
+            align-items: center;
+            gap: 12px;  /* 减小图标和文字之间的间距 */
+            padding: 16px;
+            background: var(--card-background);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 229, 255, 0.1);
+        }
+
+        /* 模块头部统一样式 */
+        .module-header {
+            padding: 16px 20px;
+            background: var(--card-background);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .module-header h3 {
+            color: var(--text-color);
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 模块内容统一样式 */
+        .module-content {
+            padding: 20px;
+        }
+
+        /* 聊天区域卡片样式统一 */
+        .chat-section {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            position: sticky;
+            top: calc(var(--header-height) + 20px);
+            height: calc(100vh - var(--header-height) - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--card-background);
+        }
+
+        /* 表格容器样式统一 */
+        .table-container {
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 表单组样式统一 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        /* 确保所有内边距统一 */
+        .chat-input-container,
+        .chat-controls {
+            padding: 16px 20px;
+        }
+
+        /* 模态框内容样式统一 */
+        .modal-content {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        th {
+            background: var(--card-background);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        tr:hover td {
+            background: var(--hover-color);
+        }
+
+        /* 表单样式 */
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 14px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        /* 按钮基础样式 */
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3);
+            opacity: 0.9;
+        }
+
+        /* 刷新按钮特殊样式 */
+        .refresh-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .refresh-button:hover {
+            background: var(--hover-color);
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        /* 操作按钮样式 */
+        .action-button {
+            padding: 6px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .edit-button:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+            background: rgba(0, 229, 255, 0.1);
+        }
+
+        .delete-button:hover {
+            color: var(--error-color);
+            border-color: var(--error-color);
+            background: rgba(255, 77, 77, 0.1);
+        }
+
+        /* 发送按钮样式 */
+        .send-button {
+            background: var(--primary-color);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send-button:hover {
+            background: var(--secondary-color);
+        }
+
+        /* 左侧内容区域 */
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* 右侧聊天区域 */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: var(--background-color);
+        }
+
+        .chat-input-container {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-color);
+            background: var(--card-background);
+            position: sticky;
+            bottom: 0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .chat-controls {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .select-group {
+            margin-bottom: 8px;
+        }
+
+        .select-group:last-child {
+            margin-bottom: 0;
+        }
+
+        /* 通知样式 */
+        .notification-container {
+            position: fixed;
+            top: calc(var(--header-height) + 20px);
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .notification {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-width: 300px;
+        }
+
+        .notification.success {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .notification.error {
+            border-left: 4px solid var(--error-color);
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            position: relative;
+            width: 90%;
+            max-width: 500px;
+            margin: 80px auto;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .close-button {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            font-size: 20px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+
+        .close-button:hover {
+            background: var(--hover-color);
+            color: var(--text-color);
+        }
+
+        .modal-header {
+            margin-bottom: 24px;
+        }
+
+        .modal-header h3 {
+            color: var(--text-color);
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.1);
+        }
+
+        .modal button[type="submit"] {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .modal button[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 229, 255, 0.2);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+
+            .chat-section {
+                position: static;
+                height: 500px;
+            }
+        }
+
+        /* 主题切换开关 */
+        .theme-switch {
+            display: flex;
+            align-items: center;
+            margin-left: auto;
+            gap: 8px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--card-background);
+            transition: .4s;
+            border-radius: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background-color: var(--primary-color);
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+            background-color: var(--background-color);
+        }
+
+        /* 聊天气泡样式 */
+        .message {
+            max-width: 80%;
+            margin: 10px 0;
+            padding: 12px 16px;
+            border-radius: 12px;
+            position: relative;
+            word-wrap: break-word;
+            display: flex;
+            flex-direction: column;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+        }
+
+        .user-message {
+            margin-left: auto;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-top-right-radius: 2px;
+        }
+
+        .ai-message {
+            margin-right: auto;
+            background: var(--card-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-top-left-radius: 2px;
+        }
+
+        /* 消息时间样式优化 */
+        .message-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            text-align: right;
+            opacity: 0.8;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+
+        .user-message .message-time {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* AI消息内容样式 */
+        .ai-message .message-content {
+            white-space: pre-wrap;  /* 保留空格和换行符 */
+            word-break: break-word; /* 允许在单词内换行 */
+            line-height: 1.5;      /* 行高 */
+        }
+
+        /* 代码块样式优化 */
+        .ai-message pre {
+            background: var(--background-color);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+            white-space: pre;      /* 保持代码块的格式 */
+        }
+
+        .ai-message code {
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+        }
+
+        /* 标题组样式 */
+        .title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: normal;
+        }
+
+        /* 统计卡片样式 */
+        .stats-card {
+            background: linear-gradient(135deg, var(--card-background), var(--card-background));
+            border: 1px solid var(--border-color);
+            padding: 24px;
+        }
+
+        .stats-grid {
+            display: flex;  /* 改为 flex 布局 */
+            justify-content: space-between;  /* 在主轴上平均分配空间 */
+            align-items: center;  /* 在交叉轴上居中对齐 */
+            gap: 16px;  /* 减小间距 */
+        }
+
+        .stat-item {
+            flex: 1;  /* 让每个统计项平均分配空间 */
+            display: flex;
+            align-items: center;
+            gap: 12px;  /* 减小图标和文字之间的间距 */
+            padding: 16px;
+            background: var(--card-background);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-icon {
+            font-size: 24px;
+            color: var(--primary-color);
+        }
+
+        .stat-content {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* 头部按钮组样式 */
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .add-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .add-button:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+            background: rgba(0, 229, 255, 0.1);
+        }
+
+        /* 连接按钮样式重写 */
+        .connect-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            box-shadow: 0 2px 4px var(--shadow-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .connect-button i {
+            font-size: 14px;
+            transition: transform 0.3s ease;
+        }
+
+        .connect-button:hover {
+            border-color: var(--primary-color);
+            background: var(--card-background);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px var(--shadow-color);
+        }
+
+        .connect-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .connect-button.connected {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .connect-button.connected:hover {
+            background: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+
+        .connect-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .connect-button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* 添加连接状态指示器 */
+        .connect-button::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: all 0.3s ease;
+        }
+
+        .connect-button.connected::after {
+            background: #4CAF50;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+        }
+
+        /* 优化聊天控件布局 */
+        .chat-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 12px 0;
+        }
+
+        .select-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: var(--card-background);
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            color: var(--text-color);
+            padding: 5px;
+        }
+        
+        .close-button:hover {
+            color: var(--error-color);
+        }
+        
+        .submit-button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .submit-button:hover {
+            background-color: var(--secondary-color);
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <!-- Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Highlight.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="title-group">
+                <a href="/" class="logo">NexusAI Hub</a>
+            </div>
+            <div class="theme-switch">
+                <i class="fas fa-sun"></i>
+                <label class="switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                </label>
+                <i class="fas fa-moon"></i>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <div class="main-container">
+            <!-- 左侧内容区域 -->
+            <div class="content-area">
+                <!-- 统计卡片 -->
+                <div class="module-card stats-card">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <i class="fas fa-cloud stat-icon"></i>
+                            <div class="stat-content">
+                                <div class="stat-value" id="modelCount">0</div>
+                                <div class="stat-label">已聚合平台</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-robot stat-icon"></i>
+                            <div class="stat-content">
+                                <div class="stat-value" id="keyCount">0</div>
+                                <div class="stat-label">已链接模型</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-comments stat-icon"></i>
+                            <div class="stat-content">
+                                <div class="stat-value" id="totalRounds">0</div>
+                                <div class="stat-label">累计对话轮数</div>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-chart-bar stat-icon"></i>
+                            <div class="stat-content">
+                                <div class="stat-value" id="totalTokens">0</div>
+                                <div class="stat-label">累计处理Token</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据库内容模块 -->
+                <div class="module-card" id="databaseModule">
+                    <div class="module-header" onclick="toggleModule('databaseModule')">
+                        <h3><i class="fas fa-chevron-down"></i> 数据库内容</h3>
+                        <div class="header-actions">
+                            <button class="action-button add-button" onclick="event.stopPropagation(); showAddProviderModal()" title="添加服务提供商">
+                                <i class="fas fa-plus"></i> 添加提供商
+                            </button>
+                            <button class="action-button add-button" onclick="event.stopPropagation(); showAddModelModal()" title="添加模型">
+                                <i class="fas fa-robot"></i> 添加模型
+                            </button>
+                            <button class="refresh-button" onclick="event.stopPropagation(); refreshDatabaseContent()">
+                                <i class="fas fa-sync-alt"></i> 刷新数据
+                            </button>
+                        </div>
+                    </div>
+                    <div class="module-content">
+                        <!-- 提供商表格 -->
+                        <div class="table-container">
+                            <div class="loading-overlay">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            </div>
+                            <h4>服务提供商列表</h4>
+                            <table id="providerTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>服务器URL</th>
+                                        <th>个性化密钥</th>
+                                        <th>描述</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- 模型表格 -->
+                        <div class="table-container">
+                            <div class="loading-overlay">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            </div>
+                            <h4>模型列表</h4>
+                            <table id="modelTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>提供商</th>
+                                        <th>模型名称</th>
+                                        <th>描述</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧聊天测试区域 -->
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h3>模型测试</h3>
+                    <div class="chat-controls">
+                        <div class="select-group">
+                            <label for="chatProvider">选择提供商：</label>
+                            <select id="chatProvider" onchange="updateChatKeys()"></select>
+                        </div>
+                        <div class="select-group">
+                            <label for="chatKey">选择模型：</label>
+                            <select id="chatKey"></select>
+                        </div>
+                        <button id="wsConnectBtn" class="connect-button" onclick="toggleWebSocket()">
+                            <i class="fas fa-plug"></i>
+                            <span>连接</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="chatContainer" class="chat-container"></div>
+                
+                <div class="chat-input-container">
+                    <div class="chat-input-wrapper">
+                        <input type="text" id="messageInput" placeholder="输入测试内容..." 
+                               onkeypress="if(event.key === 'Enter') sendMessage()" disabled>
+                        <button class="send-button" onclick="sendMessage()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <!-- 编辑模态框 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <form id="editForm">
+                <!-- 表单内容将通过JavaScript动态生成 -->
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加提供商模态框 -->
+    <div id="addProviderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加服务提供商</h3>
+                <span class="close-button" onclick="closeModal('addProviderModal')">&times;</span>
+            </div>
+            <form id="addProviderForm">
+                <div class="form-group">
+                    <label for="providerName">提供商名称</label>
+                    <input type="text" id="providerName" required>
+                </div>
+                <div class="form-group">
+                    <label for="serverUrl">服务器URL</label>
+                    <input type="url" id="serverUrl" required>
+                </div>
+                <div class="form-group">
+                    <label for="serverKey">服务器密钥</label>
+                    <input type="password" id="serverKey" required>
+                </div>
+                <div class="form-group">
+                    <label for="personalizedKey">个性化密钥</label>
+                    <input type="text" id="personalizedKey" required>
+                </div>
+                <div class="form-group">
+                    <label for="providerDescription">描述</label>
+                    <input type="text" id="providerDescription">
+                </div>
+                <button type="submit" class="submit-button">添加</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加模型模态框 -->
+    <div id="addModelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加模型</h3>
+                <button class="close-button" onclick="closeModal('addModelModal')">&times;</button>
+            </div>
+            <form id="addModelForm">
+                <div class="form-group">
+                    <label for="modelProviderId">选择提供商</label>
+                    <select id="modelProviderId" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="modelName">模型名称</label>
+                    <input type="text" id="modelName" required>
+                </div>
+                <div class="form-group">
+                    <label for="modelDescription">描述</label>
+                    <input type="text" id="modelDescription">
+                </div>
+                <button type="submit" class="submit-button">添加</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 编辑提供商模态框 -->
+    <div id="editProviderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑服务提供商</h3>
+                <button class="close-button" onclick="closeModal('editProviderModal')">&times;</button>
+            </div>
+            <form id="editProviderForm">
+                <input type="hidden" id="editProviderId">
+                <div class="form-group">
+                    <label for="editProviderName">提供商名称</label>
+                    <input type="text" id="editProviderName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editServerUrl">服务器URL</label>
+                    <input type="url" id="editServerUrl" required>
+                </div>
+                <div class="form-group">
+                    <label for="editServerKey">服务器密钥</label>
+                    <input type="password" id="editServerKey" required>
+                </div>
+                <div class="form-group">
+                    <label for="editPersonalizedKey">个性化密钥</label>
+                    <input type="text" id="editPersonalizedKey" required>
+                </div>
+                <div class="form-group">
+                    <label for="editProviderDescription">描述</label>
+                    <input type="text" id="editProviderDescription">
+                </div>
+                <button type="submit" class="submit-button">更新</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加编辑模型的模态框 -->
+    <div id="editModelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑模型</h3>
+                <button class="close-button" onclick="closeModal('editModelModal')">&times;</button>
+            </div>
+            <form id="editModelForm">
+                <input type="hidden" id="editModelId">
+                <div class="form-group">
+                    <label for="editModelProviderId">选择提供商</label>
+                    <select id="editModelProviderId" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="editModelName">模型名称</label>
+                    <input type="text" id="editModelName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editModelDescription">描述</label>
+                    <input type="text" id="editModelDescription">
+                </div>
+                <button type="submit" class="submit-button">更新</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+
+        // 添加一个变量来跟踪当前的AI消息元素
+        let currentAiMessage = null;
+
+        // 添加 WebSocket 状态变量
+        let isWebSocketConnected = false;
+
+        // 初始化函数
+        async function initialize() {
+            try {
+                console.log('Starting initialization...');
+                
+                // 确保所有必需的DOM元素都存在
+                const requiredElements = [
+                    'modelCount',
+                    'keyCount',
+                    'totalRounds',
+                    'totalTokens',
+                    'chatProvider',
+                    'chatKey',
+                    'messageInput'
+                ];
+                
+                // 检查所有必需的元素
+                for (const elementId of requiredElements) {
+                    const element = document.getElementById(elementId);
+                    if (!element) {
+                        throw new Error(`找不到必需的元素: ${elementId}`);
+                    }
+                }
+                
+                // 1. 初始化模块显示状态
+                initializeModules();
+                console.log('Modules initialized');
+                
+                // 2. 初始化表格结构
+                initializeTables();
+                console.log('Tables initialized');
+                
+                // 3. 加载数据
+                await loadInitialData();
+                console.log('Data loaded');
+                
+                // 4. 更新统计数据
+                await updateStats();
+                console.log('Stats updated');
+                
+                // 5. 禁用消息输入框，直到连接建立
+                document.getElementById('messageInput').disabled = true;
+                
+                // 6. 设置定期更新统计数据
+                setInterval(updateStats, 30000); // 每30秒更新一次
+                
+                console.log('Initialization completed successfully');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                // 显示更详细的错误信息
+                const errorMessage = `初始化失败: ${error.message}\n堆栈: ${error.stack}`;
+                console.error(errorMessage);
+                showResponse(errorMessage, false);
+            }
+        }
+
+        // 初始化表格结构
+        function initializeTables() {
+            console.log('Initializing tables...');
+            const tables = {
+                'providerTable': ['ID', '名称', '服务器URL', '个性化密钥', '描述', '操作'],
+                'modelTable': ['ID', '提供商', '模型名称', '描述', '操作']
+            };
+
+            for (const [tableId, headers] of Object.entries(tables)) {
+                const table = document.getElementById(tableId);
+                if (!table) {
+                    console.error(`Table ${tableId} not found`);
+                    continue;
+                }
+
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+                
+                // 清空并重建表头
+                thead.innerHTML = `
+                    <tr>
+                        ${headers.map(header => `<th>${header}</th>`).join('')}
+                    </tr>
+                `;
+                
+                // 清空表体
+                tbody.innerHTML = '';
+            }
+        }
+
+        // 加载初始数据
+        async function loadInitialData() {
+            console.log('Loading initial data...');
+            try {
+                // 显示加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'flex';
+                });
+
+                // 1. 加载提供商数据
+                const providersResponse = await fetch('/providers');
+                if (!providersResponse.ok) {
+                    throw new Error(`Failed to fetch providers: ${providersResponse.status}`);
+                }
+                const providersData = await providersResponse.json();
+                
+                // 2. 更新提供商表格
+                if (providersData.providers) {
+                    await updateProvidersTable(providersData.providers);
+                }
+
+                // 3. 初始化统计数据
+                const statsElements = {
+                    modelCount: document.getElementById('modelCount'),
+                    keyCount: document.getElementById('keyCount'),
+                    totalRounds: document.getElementById('totalRounds'),
+                    totalTokens: document.getElementById('totalTokens')
+                };
+
+                // 检查元素是否存在后再更新
+                if (statsElements.modelCount) {
+                    statsElements.modelCount.textContent = providersData.providers ? providersData.providers.length : '0';
+                }
+
+                let connectedModels = 0;
+                let totalKeys = 0;
+
+                // 4. 加载每个提供商的API密钥
+                if (providersData.providers && providersData.providers.length > 0) {
+                    for (const provider of providersData.providers) {
+                        try {
+                            const apiKeysResponse = await fetch(`/api_keys/${provider[0]}`);
+                            if (apiKeysResponse.ok) {
+                                const apiKeysData = await apiKeysResponse.json();
+                                if (apiKeysData.api_keys) {
+                                    await updateApiKeysTable(apiKeysData.api_keys);
+                                    connectedModels += apiKeysData.api_keys.length;
+                                    totalKeys += apiKeysData.api_keys.length;
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error loading keys for provider ${provider[0]}:`, error);
+                        }
+                    }
+                }
+
+                // 5. 更新统计数字，检查元素是否存在后再更新
+                if (statsElements.keyCount) {
+                    statsElements.keyCount.textContent = connectedModels;
+                }
+                if (statsElements.totalRounds) {
+                    statsElements.totalRounds.textContent = '0';  // 或从后端获取实际数据
+                }
+                if (statsElements.totalTokens) {
+                    statsElements.totalTokens.textContent = '0';  // 或从后端获取实际数据
+                }
+
+                // 6. 更新聊天选择器选项
+                if (providersData.providers) {
+                    await updateChatSelectors(providersData.providers);
+                }
+
+                console.log('Initial data loaded successfully');
+                return true;
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+                throw error;
+            } finally {
+                // 隐藏加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'none';
+                });
+            }
+        }
+
+        // 更新聊天选择器选项
+        async function updateChatSelectors(providers) {
+            const providerSelect = document.getElementById('chatProvider');
+            if (!providerSelect) return;
+
+            providerSelect.innerHTML = providers.map(provider => 
+                `<option value="${provider[0]}">${provider[1]} (${provider[3]})</option>`
+            ).join('');
+
+            // 触发更新API密钥选择器
+            await updateChatKeys();
+        }
+
+        // 更新API密钥选择器
+        async function updateChatKeys() {
+            const providerSelect = document.getElementById('chatProvider');
+            const keySelect = document.getElementById('chatKey');
+            if (!providerSelect || !keySelect) return;
+
+            try {
+                const providerId = providerSelect.value;
+                // 修改为使用 providers/{id}/models 接口
+                const response = await fetch(`/providers/${providerId}/models`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch models: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Models data:', data); // 调试日志
+
+                // 使用模型数据更新选择框
+                keySelect.innerHTML = data.models.map(model => 
+                    `<option value="${model[2]}">${model[2]}</option>`
+                ).join('');
+                
+                if (data.models.length === 0) {
+                    appendMessage('error', '当前提供商没有可用的模型');
+                }
+            } catch (error) {
+                console.error('Error updating chat models:', error);
+                appendMessage('error', '加载模型失败: ' + error.message);
+            }
+        }
+
+        // 刷新数据库内容
+        async function refreshDatabaseContent() {
+            try {
+                // 显示加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'flex';
+                });
+
+                // 获取提供商数据
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                
+                // 更新提供商表格
+                const providerTbody = document.querySelector("#providerTable tbody");
+                providerTbody.innerHTML = providersData.providers.map((provider, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${provider[1]}</td>
+                        <td>${provider[2]}</td>
+                        <td>${provider[4]}</td>
+                        <td>${provider[5] || ''}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // 获取并更新模型表格
+                const modelTbody = document.querySelector("#modelTable tbody");
+                if (modelTbody) {
+                    // 清空现有内容
+                    modelTbody.innerHTML = '';
+                    
+                    let modelCounter = 1; // 用于模型的全局计数
+                    
+                    // 获取每个提供商的模型
+                    for (const provider of providersData.providers) {
+                        try {
+                            const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
+                            if (!modelsResponse.ok) {
+                                console.error(`获取提供商 ${provider[1]} 的模型失败:`, modelsResponse.statusText);
+                                continue;
+                            }
+                            
+                            const modelsData = await modelsResponse.json();
+                            if (!modelsData.models || !Array.isArray(modelsData.models)) {
+                                console.error(`提供商 ${provider[1]} 的模型数据格式错误:`, modelsData);
+                                continue;
+                            }
+                            
+                            // 添加该提供商的所有模型到表格
+                            const modelRows = modelsData.models.map(model => `
+                                <tr>
+                                    <td>${modelCounter++}</td>
+                                    <td>${provider[1]}</td>
+                                    <td>${model[2]}</td>
+                                    <td>${model[3] || ''}</td>
+                                    <td>
+                                        <button class="action-button edit-button" onclick="editModel(${model[0]})">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('');
+                            
+                            modelTbody.innerHTML += modelRows;
+                        } catch (error) {
+                            console.error(`处理提供商 ${provider[1]} 的模型时出错:`, error);
+                        }
+                    }
+                }
+
+                // 更新聊天界面的提供商选择框
+                const chatProviderSelect = document.getElementById('chatProvider');
+                if (chatProviderSelect) {
+                    chatProviderSelect.innerHTML = providersData.providers.map(provider => 
+                        `<option value="${provider[0]}">${provider[1]}</option>`
+                    ).join('');
+                    // 触发一次更新模型选择框
+                    await updateChatKeys();
+                }
+
+            } catch (error) {
+                console.error('刷新数据失败:', error);
+                showResponse("刷新数据失败: " + error.message, false);
+            } finally {
+                // 隐藏加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'none';
+                });
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', initialize);
+
+        // 确保模块初始化正确
+        function initializeModules() {
+            console.log('Initializing modules...');
+            const databaseModule = document.getElementById('databaseModule');
+            if (databaseModule) {
+                const moduleContent = databaseModule.querySelector('.module-content');
+                const icon = databaseModule.querySelector('.module-header i');
+                if (moduleContent && icon) {
+                    moduleContent.style.display = 'block';
+                    icon.className = 'fas fa-chevron-down';
+                }
+            }
+        }
+
+        // 修改 WebSocket 连接函数
+        function connectWebSocket() {
+            return new Promise((resolve, reject) => {
+                try {
+                    // 如果已经存在连接，先关闭
+                    if (ws && ws.readyState !== WebSocket.CLOSED) {
+                        ws.close(1000, "Normal closure");
+                    }
+                    
+                    ws = new WebSocket(`ws://${window.location.host}/ws/chat`);
+                    
+                    ws.onopen = () => {
+                        console.log('WebSocket已连接');
+                        resolve();
+                    };
+                    
+                    ws.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        appendMessage('error', 'WebSocket连接错误');
+                        reject(error);
+                    };
+                    
+                    ws.onclose = (event) => {
+                        console.log('WebSocket已断开, 代码:', event.code, '原因:', event.reason);
+                        // 只有在非正常关闭时才显示断开消息
+                        if (event.code !== 1000 && event.code !== 1001) {
+                            appendMessage('error', '连接已断开，正在尝试重新连接...');
+                            // 添加重连逻辑
+                            setTimeout(() => {
+                                connectWebSocket().catch(console.error);
+                            }, 3000);
+                        }
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            console.log('收到WebSocket消息:', event.data);
+                            const data = JSON.parse(event.data);
+                            
+                            if (data.error) {
+                                appendMessage('error', data.error);
+                                currentAiMessage = null;
+                                return;
+                            }
+                            
+                            if (data.type === 'message' && data.content) {
+                                appendMessage('ai', data.content);
+                            }
+                        } catch (error) {
+                            console.error('处理消息错误:', error);
+                            appendMessage('error', '处理消息时出错: ' + error.message);
+                            currentAiMessage = null;
+                        }
+                    };
+                } catch (error) {
+                    console.error('创建WebSocket错误:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        // 修改发送消息函数
+        async function sendMessage() {
+            if (!isWebSocketConnected) {
+                showResponse("请先建立连接", false);
+                return;
+            }
+            
+            const messageInput = document.getElementById('messageInput');
+            const providerSelect = document.getElementById('chatProvider');
+            const modelSelect = document.getElementById('chatKey');
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // 检查 WebSocket 状态并尝试重连
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket未连接或已关闭，尝试重新连接...');
+                try {
+                    await connectWebSocket();
+                } catch (error) {
+                    console.error('重新连接失败:', error);
+                    appendMessage('error', '连接失败，请刷新页面重试');
+                    return;
+                }
+            }
+            
+            const messageData = {
+                message: message,
+                provider_id: parseInt(providerSelect.value),
+                model_name: modelSelect.value  // 直接使用选中的模型名称
+            };
+
+            console.log('发送消息:', messageData);
+            
+            // 添加用户消息到聊天界面
+            appendMessage('user', message);
+            currentAiMessage = null;
+            
+            // 清空输入框
+            messageInput.value = '';
+            
+            try {
+                ws.send(JSON.stringify(messageData));
+            } catch (error) {
+                console.error('发送消息错误:', error);
+                appendMessage('error', '发送消息失败: ' + error.message);
+            }
+        }
+
+        // 添加消息到聊天界面
+        function appendMessage(role, content) {
+            console.log('添加消息:', role, content);
+            const chatContainer = document.getElementById("chatContainer");
+            
+            // 如果是用户消息或错误消息，直接创建新的消息框
+            if (role === 'user' || role === 'error') {
+                const messageDiv = document.createElement("div");
+                messageDiv.className = `message ${role}-message`;
+                
+                const contentDiv = document.createElement("div");
+                contentDiv.className = "message-content";
+                contentDiv.textContent = content;
+                
+                messageDiv.appendChild(contentDiv);
+                
+                const timeDiv = document.createElement("div");
+                timeDiv.className = "message-time";
+                timeDiv.textContent = new Date().toLocaleTimeString();
+                messageDiv.appendChild(timeDiv);
+                
+                chatContainer.appendChild(messageDiv);
+                currentAiMessage = null;
+            } 
+            // 如果是AI消息
+            else if (role === 'ai') {
+                // 如果没有当前AI消息框，创建一个新的
+                if (!currentAiMessage) {
+                    currentAiMessage = document.createElement("div");
+                    currentAiMessage.className = 'message ai-message';
+                    
+                    const contentDiv = document.createElement("div");
+                    contentDiv.className = "message-content";
+                    currentAiMessage.appendChild(contentDiv);
+                    
+                    const timeDiv = document.createElement("div");
+                    timeDiv.className = "message-time";
+                    timeDiv.textContent = new Date().toLocaleTimeString();
+                    currentAiMessage.appendChild(timeDiv);
+                    
+                    chatContainer.appendChild(currentAiMessage);
+                }
+                
+                // 更新内容
+                const contentDiv = currentAiMessage.querySelector('.message-content');
+                contentDiv.textContent = content;  // 直接使用文本内容，不进行 Markdown 渲染
+            }
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 模块展开/收起逻辑
+        function toggleModule(moduleId) {
+            const moduleContent = document.querySelector(`#${moduleId} .module-content`);
+            const icon = document.querySelector(`#${moduleId} .module-header i`);
+            
+            if (moduleContent.style.display === 'none') {
+                moduleContent.style.display = 'block';
+                icon.className = 'fas fa-chevron-down';
+            } else {
+                moduleContent.style.display = 'none';
+                icon.className = 'fas fa-chevron-right';
+            }
+        }
+
+        // 更新提供商表格
+        async function updateProvidersTable(providers) {
+            console.log('更新提供商表格:', providers);
+            const tbody = document.querySelector("#providerTable tbody");
+            if (!tbody) {
+                console.error('找不到提供商表格tbody元素');
+                return;
+            }
+            
+            tbody.innerHTML = providers.map(provider => `
+                <tr>
+                    <td>${provider[0]}</td>
+                    <td>${provider[1]}</td>
+                    <td>${provider[2]}</td>
+                    <td>${provider[4]}</td>
+                    <td>${provider[5] || ''}</td>
+                    <td>
+                        <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 更新API密钥表格
+        async function updateApiKeysTable(apiKeys) {
+            console.log('更新API密钥表格:', apiKeys);
+            const tbody = document.querySelector("#apiKeyTable tbody");
+            if (!tbody) {
+                console.error('找不到API密钥表格tbody元素');
+                return;
+            }
+            
+            try {
+                // 获取提供商映射表（用于显示提供商名称）
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                const providerMap = new Map(
+                    providersData.providers.map(p => [p[0], p[1]])
+                );
+                
+                tbody.innerHTML = apiKeys.map(key => `
+                    <tr>
+                        <td>${key[0]}</td>
+                        <td>${providerMap.get(key[1]) || key[1]}</td>
+                        <td>${key[2]}</td>
+                        <td>${key[3]}</td>
+                        <td>${key[4] || ''}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editApiKey(${key[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteApiKey(${key[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('更新API密钥表格失败:', error);
+                showResponse("更新API密钥表格失败: " + error.message, false);
+            }
+        }
+
+        // 表单提交处理
+        document.addEventListener('DOMContentLoaded', function() {
+            const editForm = document.getElementById('editForm');
+            
+            editForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                console.log('表单提交');
+                
+                try {
+                    const id = document.getElementById('editId').value;
+                    const type = document.getElementById('editType').value;
+                    
+                    let url, data;
+                    if (type === 'provider') {
+                        url = `/providers/${id}`;
+                        data = {
+                            name: document.getElementById('editName').value.trim(),
+                            server_url: document.getElementById('editServerUrl').value.trim(),
+                            model_name: document.getElementById('editModelName').value.trim()
+                        };
+                    } else {
+                        url = `/api_keys/${id}`;
+                        data = {
+                            server_key: document.getElementById('editServerKey').value.trim(),
+                            personalized_key: document.getElementById('editPersonalizedKey').value.trim(),
+                            description: document.getElementById('editDescription').value.trim()
+                        };
+                    }
+                    
+                    console.log('发送更新请求:', { url, data });
+                    
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    console.log('更新响应:', result);
+                    
+                    if (response.ok) {
+                        showResponse(result.message || "更新成功", true);
+                        closeModal();
+                        // 刷新数据列表
+                        await refreshDatabaseContent();
+                    } else {
+                        showResponse(result.detail || "更新失败", false);
+                    }
+                } catch (error) {
+                    console.error('更新错误:', error);
+                    showResponse("更新失败: " + error.message, false);
+                }
+            });
+        });
+
+        // 添加刷新数据库内容的函数
+        async function refreshDatabaseContent() {
+            try {
+                // 显示加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'flex';
+                });
+
+                // 获取提供商数据
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                
+                // 更新提供商表格
+                const providerTbody = document.querySelector("#providerTable tbody");
+                providerTbody.innerHTML = providersData.providers.map((provider, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${provider[1]}</td>
+                        <td>${provider[2]}</td>
+                        <td>${provider[4]}</td>
+                        <td>${provider[5] || ''}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // 获取并更新模型表格
+                const modelTbody = document.querySelector("#modelTable tbody");
+                if (modelTbody) {
+                    // 清空现有内容
+                    modelTbody.innerHTML = '';
+                    
+                    let modelCounter = 1; // 用于模型的全局计数
+                    
+                    // 获取每个提供商的模型
+                    for (const provider of providersData.providers) {
+                        try {
+                            const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
+                            if (!modelsResponse.ok) {
+                                console.error(`获取提供商 ${provider[1]} 的模型失败:`, modelsResponse.statusText);
+                                continue;
+                            }
+                            
+                            const modelsData = await modelsResponse.json();
+                            if (!modelsData.models || !Array.isArray(modelsData.models)) {
+                                console.error(`提供商 ${provider[1]} 的模型数据格式错误:`, modelsData);
+                                continue;
+                            }
+                            
+                            // 添加该提供商的所有模型到表格
+                            const modelRows = modelsData.models.map(model => `
+                                <tr>
+                                    <td>${modelCounter++}</td>
+                                    <td>${provider[1]}</td>
+                                    <td>${model[2]}</td>
+                                    <td>${model[3] || ''}</td>
+                                    <td>
+                                        <button class="action-button edit-button" onclick="editModel(${model[0]})">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('');
+                            
+                            modelTbody.innerHTML += modelRows;
+                        } catch (error) {
+                            console.error(`处理提供商 ${provider[1]} 的模型时出错:`, error);
+                        }
+                    }
+                }
+
+                // 更新聊天界面的提供商选择框
+                const chatProviderSelect = document.getElementById('chatProvider');
+                if (chatProviderSelect) {
+                    chatProviderSelect.innerHTML = providersData.providers.map(provider => 
+                        `<option value="${provider[0]}">${provider[1]}</option>`
+                    ).join('');
+                    // 触发一次更新模型选择框
+                    await updateChatKeys();
+                }
+
+            } catch (error) {
+                console.error('刷新数据失败:', error);
+                showResponse("刷新数据失败: " + error.message, false);
+            } finally {
+                // 隐藏加载状态
+                document.querySelectorAll('.loading-overlay').forEach(overlay => {
+                    overlay.style.display = 'none';
+                });
+            }
+        }
+
+        // 确保模态框结构存在
+        document.body.insertAdjacentHTML('beforeend', `
+            <div id="editModal" class="modal">
+                <div class="modal-content">
+                    <form id="editForm">
+                        <!-- 表单内容将通过JavaScript动态生成 -->
+                    </form>
+                </div>
+            </div>
+        `);
+
+        // 添加相关样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.5);
+            }
+
+            .modal-content {
+                background-color: var(--card-background);
+                margin: 15% auto;
+                padding: 20px;
+                border-radius: 8px;
+                width: 80%;
+                max-width: 500px;
+            }
+
+            .form-group {
+                margin-bottom: 15px;
+            }
+
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+            }
+
+            .form-group input {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // 修改 WebSocket 连接函数
+        function connectWebSocket() {
+            return new Promise((resolve, reject) => {
+                try {
+                    // 如果已经存在连接，先关闭
+                    if (ws && ws.readyState !== WebSocket.CLOSED) {
+                        ws.close(1000, "Normal closure");
+                    }
+                    
+                    ws = new WebSocket(`ws://${window.location.host}/ws/chat`);
+                    
+                    ws.onopen = () => {
+                        console.log('WebSocket已连接');
+                        resolve();
+                    };
+                    
+                    ws.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        appendMessage('error', 'WebSocket连接错误');
+                        reject(error);
+                    };
+                    
+                    ws.onclose = (event) => {
+                        console.log('WebSocket已断开, 代码:', event.code, '原因:', event.reason);
+                        // 只有在非正常关闭时才显示断开消息
+                        if (event.code !== 1000 && event.code !== 1001) {
+                            appendMessage('error', '连接已断开，正在尝试重新连接...');
+                            // 添加重连逻辑
+                            setTimeout(() => {
+                                connectWebSocket().catch(console.error);
+                            }, 3000);
+                        }
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            console.log('收到WebSocket消息:', event.data);
+                            const data = JSON.parse(event.data);
+                            
+                            if (data.error) {
+                                appendMessage('error', data.error);
+                                currentAiMessage = null;
+                                return;
+                            }
+                            
+                            if (data.type === 'message' && data.content) {
+                                appendMessage('ai', data.content);
+                            }
+                        } catch (error) {
+                            console.error('处理消息错误:', error);
+                            appendMessage('error', '处理消息时出错: ' + error.message);
+                            currentAiMessage = null;
+                        }
+                    };
+                } catch (error) {
+                    console.error('创建WebSocket错误:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        // 修改发送消息函数
+        async function sendMessage() {
+            if (!isWebSocketConnected) {
+                showResponse("请先建立连接", false);
+                return;
+            }
+            
+            const messageInput = document.getElementById('messageInput');
+            const providerSelect = document.getElementById('chatProvider');
+            const modelSelect = document.getElementById('chatKey');
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // 检查 WebSocket 状态并尝试重连
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket未连接或已关闭，尝试重新连接...');
+                try {
+                    await connectWebSocket();
+                } catch (error) {
+                    console.error('重新连接失败:', error);
+                    appendMessage('error', '连接失败，请刷新页面重试');
+                    return;
+                }
+            }
+            
+            const messageData = {
+                message: message,
+                provider_id: parseInt(providerSelect.value),
+                model_name: modelSelect.value  // 直接使用选中的模型名称
+            };
+
+            console.log('发送消息:', messageData);
+            
+            // 添加用户消息到聊天界面
+            appendMessage('user', message);
+            currentAiMessage = null;
+            
+            // 清空输入框
+            messageInput.value = '';
+            
+            try {
+                ws.send(JSON.stringify(messageData));
+            } catch (error) {
+                console.error('发送消息错误:', error);
+                appendMessage('error', '发送消息失败: ' + error.message);
+            }
+        }
+
+        // 添加消息到聊天界面
+        function appendMessage(role, content) {
+            console.log('添加消息:', role, content);
+            const chatContainer = document.getElementById("chatContainer");
+            
+            // 如果是用户消息或错误消息，直接创建新的消息框
+            if (role === 'user' || role === 'error') {
+                const messageDiv = document.createElement("div");
+                messageDiv.className = `message ${role}-message`;
+                
+                const contentDiv = document.createElement("div");
+                contentDiv.className = "message-content";
+                contentDiv.textContent = content;
+                
+                messageDiv.appendChild(contentDiv);
+                
+                const timeDiv = document.createElement("div");
+                timeDiv.className = "message-time";
+                timeDiv.textContent = new Date().toLocaleTimeString();
+                messageDiv.appendChild(timeDiv);
+                
+                chatContainer.appendChild(messageDiv);
+                currentAiMessage = null;
+            } 
+            // 如果是AI消息
+            else if (role === 'ai') {
+                // 如果没有当前AI消息框，创建一个新的
+                if (!currentAiMessage) {
+                    currentAiMessage = document.createElement("div");
+                    currentAiMessage.className = 'message ai-message';
+                    
+                    const contentDiv = document.createElement("div");
+                    contentDiv.className = "message-content";
+                    currentAiMessage.appendChild(contentDiv);
+                    
+                    const timeDiv = document.createElement("div");
+                    timeDiv.className = "message-time";
+                    timeDiv.textContent = new Date().toLocaleTimeString();
+                    currentAiMessage.appendChild(timeDiv);
+                    
+                    chatContainer.appendChild(currentAiMessage);
+                }
+                
+                // 更新内容
+                const contentDiv = currentAiMessage.querySelector('.message-content');
+                contentDiv.textContent = content;  // 直接使用文本内容，不进行 Markdown 渲染
+            }
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 模块展开/收起逻辑
+        function toggleModule(moduleId) {
+            const moduleContent = document.querySelector(`#${moduleId} .module-content`);
+            const icon = document.querySelector(`#${moduleId} .module-header i`);
+            
+            if (moduleContent.style.display === 'none') {
+                moduleContent.style.display = 'block';
+                icon.className = 'fas fa-chevron-down';
+            } else {
+                moduleContent.style.display = 'none';
+                icon.className = 'fas fa-chevron-right';
+            }
+        }
+
+        // 更新提供商表格
+        async function updateProvidersTable(providers) {
+            console.log('更新提供商表格:', providers);
+            const tbody = document.querySelector("#providerTable tbody");
+            if (!tbody) {
+                console.error('找不到提供商表格tbody元素');
+                return;
+            }
+            
+            tbody.innerHTML = providers.map(provider => `
+                <tr>
+                    <td>${provider[0]}</td>
+                    <td>${provider[1]}</td>
+                    <td>${provider[2]}</td>
+                    <td>${provider[4]}</td>
+                    <td>${provider[5] || ''}</td>
+                    <td>
+                        <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 更新API密钥表格
+        async function updateApiKeysTable(apiKeys) {
+            console.log('更新API密钥表格:', apiKeys);
+            const tbody = document.querySelector("#apiKeyTable tbody");
+            if (!tbody) {
+                console.error('找不到API密钥表格tbody元素');
+                return;
+            }
+            
+            try {
+                // 获取提供商映射表（用于显示提供商名称）
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                const providerMap = new Map(
+                    providersData.providers.map(p => [p[0], p[1]])
+                );
+                
+                tbody.innerHTML = apiKeys.map(key => `
+                    <tr>
+                        <td>${key[0]}</td>
+                        <td>${providerMap.get(key[1]) || key[1]}</td>
+                        <td>${key[2]}</td>
+                        <td>${key[3]}</td>
+                        <td>${key[4] || ''}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editApiKey(${key[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteApiKey(${key[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('更新API密钥表格失败:', error);
+                showResponse("更新API密钥表格失败: " + error.message, false);
+            }
+        }
+
+        // 修改编辑提供商函数
+        function editProvider(id) {
+            console.log('编辑提供商:', id);
+            fetch(`/providers/${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('获取提供商数据:', data);
+                    
+                    // 确保模态框和表单已经存在
+                    const modal = document.getElementById('editModal');
+                    const form = document.getElementById('editForm');
+                    
+                    // 重置并设置表单内容
+                    form.innerHTML = `
+                        <div class="modal-header">
+                            <h3>编辑服务提供商</h3>
+                        </div>
+                        <input type="hidden" id="editId" value="${data.id}">
+                        <input type="hidden" id="editType" value="provider">
+                        <div class="form-group" id="nameField">
+                            <label for="editName">名称:</label>
+                            <input type="text" id="editName" value="${data.name}" required>
+                        </div>
+                        <div class="form-group" id="serverUrlField">
+                            <label for="editServerUrl">服务器URL:</label>
+                            <input type="text" id="editServerUrl" value="${data.server_url}" required>
+                        </div>
+                        <div class="form-group" id="modelNameField">
+                            <label for="editModelName">模型名称:</label>
+                            <input type="text" id="editModelName" value="${data.model_name}" required>
+                        </div>
+                        <button type="submit">保存更改</button>
+                    `;
+                    
+                    // 显示模态框
+                    modal.style.display = 'block';
+                    
+                    // 阻止模态框内部点击事件冒泡
+                    modal.querySelector('.modal-content').addEventListener('click', function(event) {
+                        event.stopPropagation();
+                    });
+                })
+                .catch(error => {
+                    console.error('获取提供商数据失败:', error);
+                    showResponse("获取数据失败: " + error.message, false);
+                });
+        }
+
+        // 修改编辑API密钥函数
+        async function editApiKey(id) {
+            console.log('编辑API密钥:', id);
+            try {
+                const response = await fetch(`/api_keys/single/${id}`);
+                const data = await response.json();
+                console.log('获取API密钥数据:', data);
+                
+                // 确保模态框和表单已经存在
+                const modal = document.getElementById('editModal');
+                const form = document.getElementById('editForm');
+                
+                // 重置并设置表单内容
+                form.innerHTML = `
+                    <div class="modal-header">
+                        <h3>编辑API密钥</h3>
+                    </div>
+                    <input type="hidden" id="editId" value="${data.id}">
+                    <input type="hidden" id="editType" value="apikey">
+                    <div class="form-group" id="serverKeyField">
+                        <label for="editServerKey">服务器密钥:</label>
+                        <input type="text" id="editServerKey" value="${data.server_key}" required>
+                    </div>
+                    <div class="form-group" id="personalizedKeyField">
+                        <label for="editPersonalizedKey">个性化密钥:</label>
+                        <input type="text" id="editPersonalizedKey" value="${data.personalized_key}" required>
+                    </div>
+                    <div class="form-group" id="descriptionField">
+                        <label for="editDescription">描述:</label>
+                        <input type="text" id="editDescription" value="${data.description || ''}">
+                    </div>
+                    <button type="submit">保存更改</button>
+                `;
+                
+                // 显示模态框
+                modal.style.display = 'block';
+                
+                // 阻止模态框内部点击事件冒泡
+                modal.querySelector('.modal-content').addEventListener('click', function(event) {
+                    event.stopPropagation();
+                });
+            } catch (error) {
+                console.error('获取API密钥数据失败:', error);
+                showResponse("获取数据失败: " + error.message, false);
+            }
+        }
+
+        // 添加模态框关闭函数
+        function closeModal() {
+            const modal = document.getElementById('editModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // 添加模态框点击外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        async function deleteProvider(id) {
+            if (confirm('确定要删除这个服务提供商吗？')) {
+                try {
+                    await closeWebSocketConnection();
+                    
+                    const response = await fetch(`/providers/${id}`, {
+                        method: 'DELETE'
+                    });
+                    if (response.ok) {
+                        showResponse("服务提供商删除成功", true);
+                        refreshDatabaseContent();
+                    } else {
+                        const error = await response.json();
+                        showResponse("删除失败: " + error.detail, false);
+                    }
+                    
+                    await reopenWebSocketConnection();
+                } catch (error) {
+                    showResponse("删除失败: " + error.message, false);
+                }
+            }
+        }
+
+        async function deleteApiKey(id) {
+            if (confirm('确定要删除这个API密钥吗？')) {
+                try {
+                    await closeWebSocketConnection();
+                    
+                    const response = await fetch(`/api_keys/${id}`, {
+                        method: 'DELETE'
+                    });
+                    if (response.ok) {
+                        showResponse("API密钥删除成功", true);
+                        refreshDatabaseContent();
+                    } else {
+                        const error = await response.json();
+                        showResponse("删除失败: " + error.detail, false);
+                    }
+                    
+                    await reopenWebSocketConnection();
+                } catch (error) {
+                    showResponse("删除失败: " + error.message, false);
+                }
+            }
+        }
+
+        function renderMarkdown(content) {
+            try {
+                // 检查 marked 是否可用
+                if (typeof marked === 'undefined') {
+                    console.warn('Marked库未加载，返回原始文本');
+                    return content;
+                }
+                
+                // 配置 marked 选项
+                marked.setOptions({
+                    breaks: true,  // 启用换行符转换为 <br>
+                    gfm: true,     // 启用 GitHub 风格的 Markdown
+                    headerIds: false,
+                    mangle: false,
+                    sanitize: false,
+                    smartLists: true,
+                    smartypants: true,
+                    xhtml: false,
+                    highlight: function(code, lang) {
+                        // 检查 hljs 是否可用
+                        if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+                            try {
+                                return hljs.highlight(lang, code).value;
+                            } catch (e) {
+                                console.warn('代码高亮失败:', e);
+                            }
+                        }
+                        return code;
+                    }
+                });
+                
+                // 预处理内容，确保换行符被正确处理
+                const processedContent = content.replace(/\n/g, '  \n');
+                return marked(processedContent);
+            } catch (error) {
+                console.error('Markdown渲染错误:', error);
+                return content;
+            }
+        }
+
+        // 主题切换功能
+        function initTheme() {
+            const themeToggle = document.getElementById('themeToggle');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            // 默认使用亮色主题
+            document.documentElement.setAttribute('data-theme', 'light');
+            themeToggle.checked = false;
+            
+            themeToggle.addEventListener('change', function(e) {
+                if (e.target.checked) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            });
+        }
+
+        // 在页面加载完成后初始化主题
+        window.addEventListener('DOMContentLoaded', initTheme);
+
+        // 修改显示添加模态框函数
+        function showAddModal(type) {
+            const modal = document.getElementById('editModal');
+            const form = document.getElementById('editForm');
+            
+            form.innerHTML = '';
+            
+            if (type === 'provider') {
+                form.innerHTML = `
+                    <div class="modal-header">
+                        <h3>添加新服务提供商</h3>
+                        <button type="button" class="close-button" onclick="closeModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label for="name">提供商名称:</label>
+                        <input type="text" id="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="serverUrl">服务器URL:</label>
+                        <input type="text" id="serverUrl" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modelName">模型名称:</label>
+                        <input type="text" id="modelName" required>
+                    </div>
+                    <button type="submit" class="submit-button">添加提供商</button>
+                `;
+                
+                // 添加提供商表单提交事件
+                form.onsubmit = async function(event) {
+                    event.preventDefault();
+                    try {
+                        const response = await fetch("/providers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                name: document.getElementById("name").value.trim(),
+                                server_url: document.getElementById("serverUrl").value.trim(),
+                                model_name: document.getElementById("modelName").value.trim()
+                            })
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            showResponse(result.message, true);
+                            closeModal();
+                            await refreshDatabaseContent();
+                        } else {
+                            showResponse(result.detail || "添加失败", false);
+                        }
+                    } catch (error) {
+                        showResponse("添加提供商失败: " + error.message, false);
+                    }
+                };
+            } else if (type === 'apikey') {
+                form.innerHTML = `
+                    <div class="modal-header">
+                        <h3>添加API密钥</h3>
+                        <button type="button" class="close-button" onclick="closeModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label for="providerId">选择提供商:</label>
+                        <select id="providerId" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="serverKey">服务器密钥:</label>
+                        <input type="text" id="serverKey" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="personalizedKey">个性化密钥:</label>
+                        <input type="text" id="personalizedKey" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="description">描述:</label>
+                        <input type="text" id="description">
+                    </div>
+                    <button type="submit" class="submit-button">添加密钥</button>
+                `;
+                
+                // 加载未分配API密钥的提供商列表
+                loadAvailableProviders();
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        // 加载未分配API密钥的提供商选项
+        async function loadAvailableProviders() {
+            try {
+                const response = await fetch('/providers/available');
+                const data = await response.json();
+                const select = document.getElementById('providerId');
+                select.innerHTML = data.providers.map(provider => 
+                    `<option value="${provider[0]}">${provider[1]} (${provider[3]})</option>`
+                ).join('');
+                
+                if (data.providers.length === 0) {
+                    showResponse("没有可用的提供商，所有提供商都已分配API密钥", false);
+                    closeModal();
+                }
+            } catch (error) {
+                console.error('Error loading providers:', error);
+                showResponse("加载提供商列表失败", false);
+            }
+        }
+
+        // 显示响应消息
+        function showResponse(message, isSuccess) {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            notification.className = `notification ${isSuccess ? 'success' : 'error'}`;
+            notification.textContent = message;
+            container.appendChild(notification);
+            
+            // 3秒后自动移除通知
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // 添加 WebSocket 管理函数
+        async function closeWebSocketConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close(1000, "Normal closure");
+                // 等待连接完全关闭
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        async function reopenWebSocketConnection() {
+            await connectWebSocket();
+        }
+
+        // 添加连接状态切换函数
+        async function toggleWebSocket() {
+            const connectBtn = document.getElementById('wsConnectBtn');
+            const messageInput = document.getElementById('messageInput');
+            
+            if (!isWebSocketConnected) {
+                try {
+                    connectBtn.disabled = true;
+                    await connectWebSocket();
+                    isWebSocketConnected = true;
+                    connectBtn.classList.add('connected');
+                    connectBtn.innerHTML = '<i class="fas fa-plug"></i><span>断开</span>';
+                    messageInput.disabled = false;
+                    showResponse("WebSocket 连接成功", true);
+                } catch (error) {
+                    showResponse("连接失败: " + error.message, false);
+                } finally {
+                    connectBtn.disabled = false;
+                }
+            } else {
+                try {
+                    connectBtn.disabled = true;
+                    await closeWebSocketConnection();
+                    isWebSocketConnected = false;
+                    connectBtn.classList.remove('connected');
+                    connectBtn.innerHTML = '<i class="fas fa-plug"></i><span>连接</span>';
+                    messageInput.disabled = true;
+                    showResponse("WebSocket 已断开", true);
+                } catch (error) {
+                    showResponse("断开失败: " + error.message, false);
+                } finally {
+                    connectBtn.disabled = false;
+                }
+            }
+        }
+
+        // 更新模型表格
+        async function updateModelsTable(models) {
+            console.log('更新模型表格:', models);
+            const tbody = document.querySelector("#modelTable tbody");
+            if (!tbody) {
+                console.error('找不到模型表格tbody元素');
+                return;
+            }
+            
+            try {
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                const providerMap = new Map(
+                    providersData.providers.map(p => [p[0], p[1]])
+                );
+                
+                tbody.innerHTML = models.map(model => `
+                    <tr>
+                        <td>${model[0]}</td>
+                        <td>${providerMap.get(model[1]) || model[1]}</td>
+                        <td>${model[2]}</td>
+                        <td>${model[3] || ''}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editModel(${model[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('更新模型表格失败:', error);
+                showResponse("更新模型表格失败: " + error.message, false);
+            }
+        }
+
+        // 修改表单提交处理
+        document.getElementById("addModelForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            try {
+                const response = await fetch("/provider_models", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        provider_id: parseInt(document.getElementById("providerId").value),
+                        model_name: document.getElementById("modelName").value,
+                        description: document.getElementById("modelDescription").value
+                    })
+                });
+                const result = await response.json();
+                showResponse(result.message, true);
+                await refreshDatabaseContent();
+                event.target.reset();
+            } catch (error) {
+                showResponse("添加模型失败: " + error.message, false);
+            }
+        });
+
+        // 更新提供商选择框
+        function updateProviderSelect(providers) {
+            const selects = ['modelProviderId', 'chatProvider'].map(id => document.getElementById(id)).filter(Boolean);
+            selects.forEach(select => {
+                select.innerHTML = providers.map(provider => 
+                    `<option value="${provider[0]}">${provider[1]}</option>`
+                ).join('');
+            });
+        }
+
+        // 模态框操作
+        function showAddProviderModal() {
+            document.getElementById('addProviderModal').style.display = 'block';
+        }
+
+        function showAddModelModal() {
+            // 在显示模态框之前，先加载提供商列表
+            fetch('/providers')
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('modelProviderId');
+                    select.innerHTML = data.providers.map(provider => 
+                        `<option value="${provider[0]}">${provider[1]}</option>`
+                    ).join('');
+                    document.getElementById('addModelModal').style.display = 'block';
+                })
+                .catch(error => {
+                    showResponse('加载提供商列表失败: ' + error.message, false);
+                });
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // 表单提交处理
+        document.getElementById('addProviderForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // 调试：检查所有需要的元素是否存在
+            const elements = {
+                providerName: document.getElementById('providerName'),
+                serverUrl: document.getElementById('serverUrl'),
+                serverKey: document.getElementById('serverKey'),
+                personalizedKey: document.getElementById('personalizedKey'),
+                providerDescription: document.getElementById('providerDescription')
+            };
+            
+            // 打印每个元素的状态
+            console.log('Form elements:', elements);
+            
+            // 检查是否有任何元素不存在
+            const missingElements = Object.entries(elements)
+                .filter(([key, element]) => !element)
+                .map(([key]) => key);
+            
+            if (missingElements.length > 0) {
+                console.error('Missing elements:', missingElements);
+                showResponse(`表单元素未找到: ${missingElements.join(', ')}`, false);
+                return;
+            }
+            
+            try {
+                const formData = {
+                    name: elements.providerName.value,
+                    server_url: elements.serverUrl.value,
+                    server_key: elements.serverKey.value,
+                    personalized_key: elements.personalizedKey.value,
+                    description: elements.providerDescription.value
+                };
+                
+                // 打印将要发送的数据
+                console.log('Sending data:', formData);
+                
+                const response = await fetch('/providers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '添加失败');
+                }
+                
+                showResponse('提供商添加成功', true);
+                closeModal('addProviderModal');
+                this.reset();
+                await refreshDatabaseContent();
+            } catch (error) {
+                console.error('Error details:', error);
+                showResponse('添加失败: ' + error.message, false);
+            }
+        });
+
+        document.getElementById('addModelForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            try {
+                const response = await fetch('/provider_models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider_id: parseInt(document.getElementById('modelProviderId').value),
+                        model_name: document.getElementById('modelName').value,
+                        description: document.getElementById('modelDescription').value
+                    })
+                });
+                
+                if (!response.ok) throw new Error('添加失败');
+                
+                showResponse('模型添加成功', true);
+                closeModal('addModelModal');
+                this.reset();
+                await refreshDatabaseContent();
+            } catch (error) {
+                showResponse('添加失败: ' + error.message, false);
+            }
+        });
+
+        // 删除操作
+        async function deleteProvider(id) {
+            if (!confirm('确定要删除这个提供商吗？相关的模型也会被删除。')) return;
+            
+            try {
+                const response = await fetch(`/providers/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) throw new Error('删除失败');
+                
+                showResponse('提供商删除成功', true);
+                await refreshDatabaseContent();
+            } catch (error) {
+                showResponse('删除失败: ' + error.message, false);
+            }
+        }
+
+        // 编辑提供商
+        async function editProvider(id) {
+            try {
+                const response = await fetch(`/providers/${id}`);
+                const provider = await response.json();
+                
+                document.getElementById('editProviderId').value = provider.id;
+                document.getElementById('editProviderName').value = provider.name;
+                document.getElementById('editServerUrl').value = provider.server_url;
+                document.getElementById('editServerKey').value = provider.server_key;
+                document.getElementById('editPersonalizedKey').value = provider.personalized_key;
+                document.getElementById('editProviderDescription').value = provider.description || '';
+                
+                document.getElementById('editProviderModal').style.display = 'block';
+            } catch (error) {
+                showResponse('加载提供商信息失败: ' + error.message, false);
+            }
+        }
+
+        document.getElementById('editProviderForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('editProviderId').value;
+            
+            try {
+                const response = await fetch(`/providers/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: document.getElementById('editProviderName').value,
+                        server_url: document.getElementById('editServerUrl').value,
+                        server_key: document.getElementById('editServerKey').value,
+                        personalized_key: document.getElementById('editPersonalizedKey').value,
+                        description: document.getElementById('editProviderDescription').value
+                    })
+                });
+                
+                if (!response.ok) throw new Error('更新失败');
+                
+                showResponse('提供商更新成功', true);
+                closeModal('editProviderModal');
+                await refreshDatabaseContent();
+            } catch (error) {
+                showResponse('更新失败: ' + error.message, false);
+            }
+        });
+
+        // 初始化加载
+        document.addEventListener('DOMContentLoaded', refreshDatabaseContent);
+
+        // 添加模态框打开时的调试
+        function showAddProviderModal() {
+            console.log('Opening provider modal');
+            const modal = document.getElementById('addProviderModal');
+            console.log('Modal element:', modal);
+            if (modal) {
+                modal.style.display = 'block';
+                
+                // 检查表单元素
+                const form = document.getElementById('addProviderForm');
+                console.log('Form element:', form);
+                
+                // 检查所有输入字段
+                const inputs = modal.querySelectorAll('input');
+                console.log('Input elements:', inputs);
+            } else {
+                console.error('Modal not found!');
+            }
+        }
+
+        // 确保 DOM 加载完成后再添加事件监听器
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            
+            // 检查表单是否存在
+            const form = document.getElementById('addProviderForm');
+            console.log('Form found:', form);
+            
+            if (form) {
+                console.log('Adding submit event listener to form');
+                // 添加事件监听器的代码...
+            } else {
+                console.error('Form not found on page load!');
+            }
+        });
+
+        // 添加编辑模型函数
+        async function editModel(modelId) {
+            try {
+                // 获取模型数据
+                const response = await fetch(`/provider_models/${modelId}`);
+                if (!response.ok) {
+                    throw new Error(`获取模型数据失败: ${response.status}`);
+                }
+                const modelData = await response.json();
+                
+                // 获取所有提供商数据用于下拉选择框
+                const providersResponse = await fetch('/providers');
+                if (!providersResponse.ok) {
+                    throw new Error(`获取提供商数据失败: ${providersResponse.status}`);
+                }
+                const providersData = await providersResponse.json();
+                
+                // 填充提供商下拉选择框
+                const providerSelect = document.getElementById('editModelProviderId');
+                providerSelect.innerHTML = providersData.providers.map(provider => 
+                    `<option value="${provider[0]}" ${modelData.provider_id === provider[0] ? 'selected' : ''}>
+                        ${provider[1]}
+                    </option>`
+                ).join('');
+                
+                // 填充模型数据到表单
+                document.getElementById('editModelId').value = modelData.id;
+                document.getElementById('editModelName').value = modelData.model_name;
+                document.getElementById('editModelDescription').value = modelData.description || '';
+                
+                // 显示模态框
+                const modal = document.getElementById('editModelModal');
+                modal.style.display = 'block';
+                
+                // 添加表单提交事件处理
+                const form = document.getElementById('editModelForm');
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    
+                    try {
+                        const updateResponse = await fetch(`/provider_models/${modelData.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                provider_id: parseInt(document.getElementById('editModelProviderId').value),
+                                model_name: document.getElementById('editModelName').value,
+                                description: document.getElementById('editModelDescription').value
+                            })
+                        });
+                        
+                        if (!updateResponse.ok) {
+                            throw new Error(`更新失败: ${updateResponse.status}`);
+                        }
+                        
+                        const result = await updateResponse.json();
+                        showResponse(result.message || "更新成功", true);
+                        closeModal('editModelModal');
+                        await refreshDatabaseContent();
+                    } catch (error) {
+                        showResponse("更新失败: " + error.message, false);
+                    }
+                };
+            } catch (error) {
+                console.error('编辑模型时出错:', error);
+                showResponse("编辑模型失败: " + error.message, false);
+            }
+        }
+
+        // 添加关闭模态框的函数
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // 添加获取统计数据的函数
+        async function updateStats() {
+            try {
+                // 获取所有必需的元素
+                const elements = {
+                    modelCount: document.getElementById('modelCount'),
+                    keyCount: document.getElementById('keyCount'),
+                    totalRounds: document.getElementById('totalRounds'),
+                    totalTokens: document.getElementById('totalTokens')
+                };
+
+                // 检查所有元素是否存在
+                for (const [key, element] of Object.entries(elements)) {
+                    if (!element) {
+                        throw new Error(`找不到统计元素: ${key}`);
+                    }
+                }
+
+                // 获取提供商和模型数量
+                const providersResponse = await fetch('/providers');
+                const providersData = await providersResponse.json();
+                elements.modelCount.textContent = 
+                    providersData.providers ? providersData.providers.length : '0';
+
+                let connectedModels = 0;
+                if (providersData.providers) {
+                    for (const provider of providersData.providers) {
+                        const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
+                        const modelsData = await modelsResponse.json();
+                        if (modelsData.models) {
+                            connectedModels += modelsData.models.length;
+                        }
+                    }
+                }
+                elements.keyCount.textContent = connectedModels;
+
+                // 获取对话统计数据
+                const statsResponse = await fetch('/stats/total');
+                const statsData = await statsResponse.json();
+                
+                elements.totalRounds.textContent = 
+                    (statsData.total_rounds || 0).toLocaleString();
+                elements.totalTokens.textContent = 
+                    (statsData.total_tokens || 0).toLocaleString();
+            } catch (error) {
+                console.error('更新统计数据失败:', error);
+                showResponse(`更新统计数据失败: ${error.message}`, false);
+            }
+        }
+
+        // 定期更新统计数据
+        setInterval(updateStats, 30000); // 每30秒更新一次
+        // 页面加载时立即更新一次
+        document.addEventListener('DOMContentLoaded', updateStats);
+
+        // 只保留一个事件监听器
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>
+

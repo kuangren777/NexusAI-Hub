@@ -1,0 +1,25 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kr777.top;
+
+    # 强制重定向到 HTTPS
+    return 301 https://$host$request_uri;  # 所有 HTTP 请求都将重定向到 HTTPS
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl ipv6only=on;
+    server_name kr777.top;
+
+    # SSL 配置
+    ssl_certificate /etc/letsencrypt/live/kr777.top/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kr777.top/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    root /var/www/html;
+    index index.html index.htm index.nginx-debian.html;
+
+    {{server_entries}}
+}

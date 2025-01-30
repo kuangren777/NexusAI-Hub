@@ -1,0 +1,90 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kr777.top;
+
+    # 强制重定向到 HTTPS
+    return 301 https://$host$request_uri;  # 所有 HTTP 请求都将重定向到 HTTPS
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl ipv6only=on;
+    server_name kr777.top;
+
+    # SSL 配置
+    ssl_certificate /etc/letsencrypt/live/kr777.top/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kr777.top/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    root /var/www/html;
+    index index.html index.htm index.nginx-debian.html;
+
+    # 配置反向代理到目标服务
+    location / {
+	proxy_set_header Authorization $auth_new;
+        # 代理请求到目标服务器
+        proxy_pass https://kr-gemini.deno.dev/;
+	proxy_buffering off;
+    	chunked_transfer_encoding on;
+	# proxy_pass http://192.168.88.3:8000;
+
+    	# 设置 WebSocket 相关请求头，处理 WebSocket 升级
+    	proxy_set_header Upgrade $http_upgrade;  # 允许 WebSocket 升级
+    	proxy_set_header Connection 'upgrade';  # 设置连接为 upgrade
+    	proxy_set_header Origin $http_origin;  # 保持请求的 Origin（如果需要）
+    	proxy_set_header Accept-Encoding "gzip, deflate, br, zstd";  # 设置压缩格式
+    	proxy_set_header Accept-Language "zh-CN,zh;q=0.9";  # 设置语言
+    	proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;  # 保持 Sec-WebSocket-Version
+    	proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;  # 保持 Sec-WebSocket-Key
+    	proxy_set_header Sec-WebSocket-Extensions $http_sec_websocket_extensions;  # 保持 Sec-WebSocket-Extensions
+
+    	# 删除与反向代理相关的头部，防止泄露代理信息
+    	proxy_set_header X-Real-IP "";  # 不传递客户端真实 IP
+    	proxy_set_header X-Forwarded-For "";  # 不传递 X-Forwarded-For 信息
+    	proxy_set_header X-Forwarded-Proto "";  # 不传递协议类型
+
+    	# 删除 Cloudflare 特有的标头
+    	proxy_set_header cf-ray "";  # 删除 cf-ray 标头
+    	proxy_set_header cf-visitor "";  # 删除 cf-visitor 标头
+    	proxy_set_header cf-connecting-ip "";  # 删除 cf-connecting-ip 标头
+    	proxy_set_header cdn-loop "";  # 删除 cdn-loop 标头
+    	proxy_set_header cf-ipcountry "";  # 删除 cf-ipcountry 标头
+    }
+
+    # 如果路径是 /gemini，则将流量代理到 https://kr-gemini.deno.dev/，并去除 /gemini 路径前缀
+    location /gemini {
+        # 去除 /gemini 路径前缀后进行代理
+        rewrite ^/gemini(/.*)$ $1 break;
+	proxy_set_header Authorization $auth_new;
+        # 代理请求到目标服务器
+        proxy_pass https://kr-gemini.deno.dev/;
+	proxy_buffering off;
+    	chunked_transfer_encoding on;
+	# proxy_pass http://192.168.88.3:8000;
+
+    	# 设置 WebSocket 相关请求头，处理 WebSocket 升级
+    	proxy_set_header Upgrade $http_upgrade;  # 允许 WebSocket 升级
+    	proxy_set_header Connection 'upgrade';  # 设置连接为 upgrade
+    	proxy_set_header Origin $http_origin;  # 保持请求的 Origin（如果需要）
+    	proxy_set_header Accept-Encoding "gzip, deflate, br, zstd";  # 设置压缩格式
+    	proxy_set_header Accept-Language "zh-CN,zh;q=0.9";  # 设置语言
+    	proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;  # 保持 Sec-WebSocket-Version
+    	proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;  # 保持 Sec-WebSocket-Key
+    	proxy_set_header Sec-WebSocket-Extensions $http_sec_websocket_extensions;  # 保持 Sec-WebSocket-Extensions
+
+    	# 删除与反向代理相关的头部，防止泄露代理信息
+    	proxy_set_header X-Real-IP "";  # 不传递客户端真实 IP
+    	proxy_set_header X-Forwarded-For "";  # 不传递 X-Forwarded-For 信息
+    	proxy_set_header X-Forwarded-Proto "";  # 不传递协议类型
+
+    	# 删除 Cloudflare 特有的标头
+    	proxy_set_header cf-ray "";  # 删除 cf-ray 标头
+    	proxy_set_header cf-visitor "";  # 删除 cf-visitor 标头
+    	proxy_set_header cf-connecting-ip "";  # 删除 cf-connecting-ip 标头
+    	proxy_set_header cdn-loop "";  # 删除 cdn-loop 标头
+    	proxy_set_header cf-ipcountry "";  # 删除 cf-ipcountry 标头
+    }
+
+}
