@@ -16,6 +16,8 @@ import sqlite3
 import aiosqlite
 from stats_tracker import StatsTracker
 import uuid
+import logging
+from datetime import datetime
 
 # 创建多个应用实例
 app_admin = FastAPI()  # 管理后台，例如端口8000
@@ -59,6 +61,37 @@ class ProviderUpdate(BaseModel):
     server_key: str
     personalized_key: str
     description: str = ""
+
+# 创建日志目录
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+# 配置日志
+def setup_logger(name, log_file, level=logging.INFO):
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    
+    # 文件处理器
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    
+    # 控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    
+    # 创建logger
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# 创建日志文件名（按日期）
+log_file = LOG_DIR / f"debug_{datetime.now().strftime('%Y%m%d')}.log"
+logger = setup_logger('nexusai', log_file)
+
+# 调试模式配置
+DEBUG_MODE = True  # 可以通过环境变量或配置文件设置
 
 # API 路由
 @app_admin.post("/providers")
@@ -341,42 +374,56 @@ async def get_total_stats():
 # 添加一个通用的流式处理函数
 async def handle_chat_completions(request: Request, path_prefix: str = ""):
     try:
+        if DEBUG_MODE:
+            logger.info("开始处理新的请求")
+        
         # 获取Authorization header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
+            if DEBUG_MODE:
+                logger.error("缺少有效的Authorization header")
             raise HTTPException(status_code=401, detail="缺少有效的Authorization header")
         
         personalized_key = auth_header.split(" ")[1]
         
         # 读取请求体
         body = await request.json()
-        # 明确检查 stream 参数
         is_stream = body.get("stream", False)
-        print(f"\n收到请求体: {json.dumps(body, ensure_ascii=False, indent=2)}")
-        print(f"请求头: {dict(request.headers)}\n")
-        print(f"是否使用流式传输: {is_stream}\n")  # 添加日志
+        
+        if DEBUG_MODE:
+            logger.info(f"请求体: {json.dumps(body, ensure_ascii=False, indent=2)}")
+            logger.info(f"请求头: {dict(request.headers)}")
+            logger.info(f"是否使用流式传输: {is_stream}")
         
         model_name = body.get("model")
         if not model_name:
+            if DEBUG_MODE:
+                logger.error("缺少model参数")
             raise HTTPException(status_code=400, detail="缺少model参数")
         
-        # 验证个性化密钥是否对应该模型的提供商
+        # 验证个性化密钥
         provider_id = await verify_personalized_key(personalized_key, model_name)
         if not provider_id:
+            if DEBUG_MODE:
+                logger.error(f"无效的API密钥或该密钥无权访问模型: {model_name}")
             raise HTTPException(status_code=401, detail="无效的API密钥或该密钥无权访问指定模型")
         
         # 获取提供商信息
         provider_info = get_provider_info(provider_id)
         if not provider_info:
+            if DEBUG_MODE:
+                logger.error("提供商配置不存在")
             raise HTTPException(status_code=404, detail="提供商配置不存在")
         
         if model_name not in provider_info["models"]:
+            if DEBUG_MODE:
+                logger.error(f"不支持的模型: {model_name}")
             raise HTTPException(status_code=400, detail="不支持的模型")
         
-        # 生成或获取会话ID
+        # 生成会话ID
         conversation_id = request.headers.get("X-Conversation-Id", str(uuid.uuid4()))
         
-        # 改进 prompt tokens 的计算方法
+        # 计算tokens
         messages = body.get("messages", [])
         prompt_tokens = sum(len(str(msg.get("content", "")).encode('utf-8')) // 4 for msg in messages)
         
@@ -397,9 +444,9 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
             "Content-Type": "application/json"
         }
 
-        # 根据 is_stream 参数决定响应方式
         if not is_stream:
-            print("使用非流式响应")
+            if DEBUG_MODE:
+                logger.info("使用非流式响应")
             response = await client.post(
                 upstream_url,
                 json=body,
@@ -409,18 +456,24 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
             await client.aclose()
             
             if response.status_code != 200:
+                if DEBUG_MODE:
+                    logger.error(f"上游服务器错误: {response.status_code}")
                 raise HTTPException(
                     status_code=response.status_code,
                     detail=response.text
                 )
+            
+            if DEBUG_MODE:
+                logger.info(f"非流式响应内容: {response.text}")
             
             return Response(
                 content=response.text,
                 media_type="application/json"
             )
         
-        print("使用流式响应")
-        # 流式传输处理
+        if DEBUG_MODE:
+            logger.info("使用流式响应")
+        
         async def stream_generator():
             completion_tokens = 0
             try:
@@ -439,6 +492,8 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
                                 "code": response.status_code
                             }
                         }
+                        if DEBUG_MODE:
+                            logger.error(f"流式响应错误: {error_msg}")
                         yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
                         return
 
@@ -451,10 +506,14 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
                                 if "choices" in data and data["choices"]:
                                     delta = data["choices"][0].get("delta", {})
                                     if "content" in delta:
-                                        completion_tokens += len(delta["content"].encode('utf-8')) // 4
-                                # 使用标准 SSE 格式
+                                        content = delta["content"]
+                                        completion_tokens += len(content.encode('utf-8')) // 4
+                                        if DEBUG_MODE:
+                                            logger.info(f"流式响应内容: {content}")
                                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
-                            except json.JSONDecodeError:
+                            except json.JSONDecodeError as e:
+                                if DEBUG_MODE:
+                                    logger.error(f"JSON解析错误: {str(e)}")
                                 continue
             except Exception as e:
                 error_msg = {
@@ -464,6 +523,8 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
                         "code": 500
                     }
                 }
+                if DEBUG_MODE:
+                    logger.error(f"流式响应异常: {str(e)}")
                 yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
             finally:
                 if completion_tokens > 0:
@@ -476,7 +537,6 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
                     )
                 await client.aclose()
 
-        # 返回标准 SSE 响应
         return StreamingResponse(
             stream_generator(),
             media_type="text/event-stream",
@@ -491,7 +551,8 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
         )
 
     except Exception as e:
-        print(f"处理请求时发生错误: {str(e)}")
+        if DEBUG_MODE:
+            logger.error(f"处理请求时发生错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # API接口路由 (8002端口)
