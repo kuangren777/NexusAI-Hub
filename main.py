@@ -350,6 +350,12 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
         
         # 读取请求体
         body = await request.json()
+        # 明确检查 stream 参数
+        is_stream = body.get("stream", False)
+        print(f"\n收到请求体: {json.dumps(body, ensure_ascii=False, indent=2)}")
+        print(f"请求头: {dict(request.headers)}\n")
+        print(f"是否使用流式传输: {is_stream}\n")  # 添加日志
+        
         model_name = body.get("model")
         if not model_name:
             raise HTTPException(status_code=400, detail="缺少model参数")
@@ -384,49 +390,82 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
 
         client = httpx.AsyncClient()
         
+        # 构建上游URL
+        upstream_url = f"{provider_info['server_url'].rstrip('/')}{path_prefix}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {provider_info['server_key']}",
+            "Content-Type": "application/json"
+        }
+
+        # 根据 is_stream 参数决定响应方式
+        if not is_stream:
+            print("使用非流式响应")
+            response = await client.post(
+                upstream_url,
+                json=body,
+                headers=headers,
+                timeout=30.0
+            )
+            await client.aclose()
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=response.text
+                )
+            
+            return Response(
+                content=response.text,
+                media_type="application/json"
+            )
+        
+        print("使用流式响应")
+        # 流式传输处理
         async def stream_generator():
             completion_tokens = 0
             try:
-                headers = {
-                    "Authorization": f"Bearer {provider_info['server_key']}",
-                    "Content-Type": "application/json"
-                }
-                
-                # 确保开启流式响应
-                body["stream"] = True
-                
-                # 构建上游URL，添加可选的path_prefix
-                upstream_url = f"{provider_info['server_url'].rstrip('/')}{path_prefix}/chat/completions"
-                
                 async with client.stream(
                     'POST',
                     upstream_url,
-                    json=body,
+                    json={**body, "stream": True},
                     headers=headers,
                     timeout=30.0
                 ) as response:
                     if response.status_code != 200:
-                        error_msg = f"data: {{\"error\": \"上游服务器错误: {response.status_code}\"}}\n\n"
-                        yield error_msg.encode('utf-8')
+                        error_msg = {
+                            "error": {
+                                "message": f"上游服务器错误: {response.status_code}",
+                                "type": "upstream_error",
+                                "code": response.status_code
+                            }
+                        }
+                        yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
                         return
 
-                    async for chunk in response.aiter_bytes():
-                        try:
-                            if chunk.startswith(b"data: "):
-                                data = json.loads(chunk[6:])
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            try:
+                                if line.startswith('data: '):
+                                    line = line.removeprefix('data: ')
+                                data = json.loads(line)
                                 if "choices" in data and data["choices"]:
                                     delta = data["choices"][0].get("delta", {})
                                     if "content" in delta:
-                                        # 改进 completion tokens 的计算方法
                                         completion_tokens += len(delta["content"].encode('utf-8')) // 4
-                        except:
-                            pass
-                        yield chunk
+                                # 使用标准 SSE 格式
+                                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                            except json.JSONDecodeError:
+                                continue
             except Exception as e:
-                error_msg = f"data: {{\"error\": \"{str(e)}\"}}\n\n"
-                yield error_msg.encode('utf-8')
+                error_msg = {
+                    "error": {
+                        "message": str(e),
+                        "type": "server_error",
+                        "code": 500
+                    }
+                }
+                yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
             finally:
-                # 确保每次都记录 completion tokens
                 if completion_tokens > 0:
                     await stats_tracker.record_chat(
                         conversation_id=conversation_id,
@@ -437,21 +476,24 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
                     )
                 await client.aclose()
 
+        # 返回标准 SSE 响应
         return StreamingResponse(
             stream_generator(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache, no-transform",
+                "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Transfer-Encoding": "chunked",
                 "X-Accel-Buffering": "no",
-                "X-Conversation-Id": conversation_id  # 返回会话ID给客户端
+                "Content-Type": "text/event-stream",
+                "X-Conversation-Id": conversation_id
             }
         )
 
     except Exception as e:
         print(f"处理请求时发生错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 # API接口路由 (8002端口)
 @app_api.post("/v1/chat/completions")
 async def chat_completions_v1(request: Request):
