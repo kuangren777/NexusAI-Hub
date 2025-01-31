@@ -372,10 +372,11 @@ async def get_total_stats():
     return await stats_tracker.get_total_stats()
 
 # 添加一个通用的流式处理函数
-async def handle_chat_completions(request: Request, path_prefix: str = ""):
+async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
+    """统一处理聊天请求，确保使用 v1 路径"""
     try:
         if DEBUG_MODE:
-            logger.info("开始处理新的请求")
+            logger.info(f"开始处理新的请求，路径前缀: {path_prefix}")
         
         # 获取Authorization header
         auth_header = request.headers.get("Authorization")
@@ -437,8 +438,10 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
 
         client = httpx.AsyncClient()
         
-        # 构建上游URL
-        upstream_url = f"{provider_info['server_url'].rstrip('/')}{path_prefix}/chat/completions"
+        # 构建上游URL时始终使用 v1 路径
+        upstream_url = f"{provider_info['server_url'].rstrip('/')}/v1/chat/completions"
+        if DEBUG_MODE:
+            logger.info(f"上游请求URL: {upstream_url}")
         headers = {
             "Authorization": f"Bearer {provider_info['server_key']}",
             "Content-Type": "application/json"
@@ -555,14 +558,18 @@ async def handle_chat_completions(request: Request, path_prefix: str = ""):
             logger.error(f"处理请求时发生错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# API接口路由 (8002端口)
+# API接口路由
 @app_api.post("/v1/chat/completions")
 async def chat_completions_v1(request: Request):
+    """标准 v1 接口"""
     return await handle_chat_completions(request, "/v1")
 
 @app_api.post("/chat/completions")
 async def chat_completions(request: Request):
-    return await handle_chat_completions(request)
+    """将非 v1 请求重定向到 v1 接口"""
+    if DEBUG_MODE:
+        logger.info("重定向非v1请求到v1接口")
+    return await handle_chat_completions(request, "/v1")
 
 # 添加测试路由
 @app_admin.post("/test")
