@@ -450,13 +450,51 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
         if not is_stream:
             if DEBUG_MODE:
                 logger.info("使用非流式响应")
-            response = await client.post(
-                upstream_url,
-                json=body,
-                headers=headers,
-                timeout=30.0
-            )
-            await client.aclose()
+            retry_count = 3  # 最大重试次数
+            retry_delay = 5  # 重试间隔（秒）
+            
+            for attempt in range(retry_count):
+                try:
+                    if attempt > 0 and DEBUG_MODE:
+                        logger.info(f"第 {attempt + 1} 次重试请求")
+                    
+                    response = await client.post(
+                        upstream_url,
+                        json=body,
+                        headers=headers,
+                        timeout=2000.0  # 增加到5分钟
+                    )
+                    break  # 如果请求成功，跳出重试循环
+                    
+                except httpx.ReadTimeout:
+                    if DEBUG_MODE:
+                        logger.error(f"请求超时（第 {attempt + 1} 次尝试）：上游服务器响应时间过长")
+                    if attempt == retry_count - 1:  # 最后一次尝试
+                        raise HTTPException(
+                            status_code=504,
+                            detail={
+                                "error": "请求超时",
+                                "type": "timeout_error",
+                                "message": "上游服务器响应时间过长，请稍后重试",
+                                "attempts": retry_count
+                            }
+                        )
+                    await asyncio.sleep(retry_delay)  # 等待一段时间后重试
+                    
+                except httpx.RequestError as e:
+                    if DEBUG_MODE:
+                        logger.error(f"请求错误: {str(e)}")
+                    raise HTTPException(
+                        status_code=502,
+                        detail={
+                            "error": str(e),
+                            "type": "request_error",
+                            "message": "与上游服务器通信时发生错误"
+                        }
+                    )
+                finally:
+                    if attempt == retry_count - 1:  # 最后一次尝试后关闭客户端
+                        await client.aclose()
             
             if response.status_code != 200:
                 if DEBUG_MODE:
@@ -488,11 +526,15 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
                     timeout=30.0
                 ) as response:
                     if response.status_code != 200:
+                        error_response = await response.text()
+                        if DEBUG_MODE:
+                            logger.error(f"上游服务器错误: {response.status_code}, 响应内容: {error_response}")
                         error_msg = {
                             "error": {
                                 "message": f"上游服务器错误: {response.status_code}",
                                 "type": "upstream_error",
-                                "code": response.status_code
+                                "code": response.status_code,
+                                "upstream_response": error_response
                             }
                         }
                         if DEBUG_MODE:
@@ -505,6 +547,8 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
                             try:
                                 if line.startswith('data: '):
                                     line = line.removeprefix('data: ')
+                                if DEBUG_MODE:
+                                    logger.info(f"尝试解析的行内容: {line}")
                                 data = json.loads(line)
                                 if "choices" in data and data["choices"]:
                                     delta = data["choices"][0].get("delta", {})
@@ -516,7 +560,7 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
                                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
                             except json.JSONDecodeError as e:
                                 if DEBUG_MODE:
-                                    logger.error(f"JSON解析错误: {str(e)}")
+                                    logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
                                 continue
             except Exception as e:
                 error_msg = {
@@ -555,8 +599,17 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
 
     except Exception as e:
         if DEBUG_MODE:
-            logger.error(f"处理请求时发生错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+            import traceback
+            error_traceback = traceback.format_exc()
+            logger.error(f"处理请求时发生错误: {str(e)}\n堆栈跟踪:\n{error_traceback}")
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": str(e),
+                "type": "server_error",
+                "message": "处理请求时发生内部错误"
+            }
+        )
 
 # API接口路由
 @app_api.post("/v1/chat/completions")
