@@ -1439,33 +1439,36 @@
                 
                 // 更新提供商表格
                 const providerTbody = document.querySelector("#providerTable tbody");
-                providerTbody.innerHTML = providersData.providers.map((provider, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${provider[1]}</td>
-                        <td>${provider[2]}</td>
-                        <td>${provider[4]}</td>
-                        <td>${provider[5] || ''}</td>
-                        <td>
-                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
+                providerTbody.innerHTML = providersData.providers.map((provider, index) => {
+                    const serverUrl = provider[2];
+                    const displayUrl = truncateText(serverUrl);
+                    const displayDesc = truncateText(provider[5]);
+                    
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${provider[1]}</td>
+                            <td title="${serverUrl}">${displayUrl}</td>
+                            <td>${provider[4]}</td>
+                            <td title="${provider[5] || ''}">${displayDesc}</td>
+                            <td>
+                                <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
 
                 // 获取并更新模型表格
                 const modelTbody = document.querySelector("#modelTable tbody");
                 if (modelTbody) {
-                    // 清空现有内容
                     modelTbody.innerHTML = '';
+                    let modelCounter = 1;
                     
-                    let modelCounter = 1; // 用于模型的全局计数
-                    
-                    // 获取每个提供商的模型
                     for (const provider of providersData.providers) {
                         try {
                             const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
@@ -1480,23 +1483,27 @@
                                 continue;
                             }
                             
-                            // 添加该提供商的所有模型到表格
-                            const modelRows = modelsData.models.map(model => `
-                                <tr>
-                                    <td>${modelCounter++}</td>
-                                    <td>${provider[1]}</td>
-                                    <td>${model[2]}</td>
-                                    <td>${model[3] || ''}</td>
-                                    <td>
-                                        <button class="action-button edit-button" onclick="editModel(${model[0]})">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('');
+                            const modelRows = modelsData.models.map(model => {
+                                const displayModelName = truncateText(model[2]);
+                                const displayDesc = truncateText(model[3]);
+                                
+                                return `
+                                    <tr>
+                                        <td>${modelCounter++}</td>
+                                        <td>${provider[1]}</td>
+                                        <td title="${model[2]}">${displayModelName}</td>
+                                        <td title="${model[3] || ''}">${displayDesc}</td>
+                                        <td>
+                                            <button class="action-button edit-button" onclick="editModel(${model[0]})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('');
                             
                             modelTbody.innerHTML += modelRows;
                         } catch (error) {
@@ -1727,23 +1734,29 @@
                 return;
             }
             
-            tbody.innerHTML = providers.map(provider => `
-                <tr>
-                    <td>${provider[0]}</td>
-                    <td>${provider[1]}</td>
-                    <td>${provider[2]}</td>
-                    <td>${provider[4]}</td>
-                    <td>${provider[5] || ''}</td>
-                    <td>
-                        <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = providers.map(provider => {
+                const serverUrl = provider[2];
+                const displayUrl = truncateText(serverUrl);
+                const displayDesc = truncateText(provider[5]);
+                
+                return `
+                    <tr>
+                        <td>${provider[0]}</td>
+                        <td>${provider[1]}</td>
+                        <td title="${serverUrl}">${displayUrl}</td>
+                        <td>${provider[4]}</td>
+                        <td title="${provider[5] || ''}">${displayDesc}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         // 更新API密钥表格
@@ -1857,33 +1870,36 @@
                 
                 // 更新提供商表格
                 const providerTbody = document.querySelector("#providerTable tbody");
-                providerTbody.innerHTML = providersData.providers.map((provider, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${provider[1]}</td>
-                        <td>${provider[2]}</td>
-                        <td>${provider[4]}</td>
-                        <td>${provider[5] || ''}</td>
-                        <td>
-                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
+                providerTbody.innerHTML = providersData.providers.map((provider, index) => {
+                    const serverUrl = provider[2];
+                    const displayUrl = truncateText(serverUrl);
+                    const displayDesc = truncateText(provider[5]);
+                    
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${provider[1]}</td>
+                            <td title="${serverUrl}">${displayUrl}</td>
+                            <td>${provider[4]}</td>
+                            <td title="${provider[5] || ''}">${displayDesc}</td>
+                            <td>
+                                <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
 
                 // 获取并更新模型表格
                 const modelTbody = document.querySelector("#modelTable tbody");
                 if (modelTbody) {
-                    // 清空现有内容
                     modelTbody.innerHTML = '';
+                    let modelCounter = 1;
                     
-                    let modelCounter = 1; // 用于模型的全局计数
-                    
-                    // 获取每个提供商的模型
                     for (const provider of providersData.providers) {
                         try {
                             const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
@@ -1893,28 +1909,29 @@
                             }
                             
                             const modelsData = await modelsResponse.json();
-                            if (!modelsData.models || !Array.isArray(modelsData.models)) {
-                                console.error(`提供商 ${provider[1]} 的模型数据格式错误:`, modelsData);
-                                continue;
-                            }
+                            if (!modelsData.models || !Array.isArray(modelsData.models)) continue;
                             
-                            // 添加该提供商的所有模型到表格
-                            const modelRows = modelsData.models.map(model => `
-                                <tr>
-                                    <td>${modelCounter++}</td>
-                                    <td>${provider[1]}</td>
-                                    <td>${model[2]}</td>
-                                    <td>${model[3] || ''}</td>
-                                    <td>
-                                        <button class="action-button edit-button" onclick="editModel(${model[0]})">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('');
+                            const modelRows = modelsData.models.map(model => {
+                                const displayModelName = truncateText(model[2]);
+                                const displayDesc = truncateText(model[3]);
+                                
+                                return `
+                                    <tr>
+                                        <td>${modelCounter++}</td>
+                                        <td>${provider[1]}</td>
+                                        <td title="${model[2]}">${displayModelName}</td>
+                                        <td title="${model[3] || ''}">${displayDesc}</td>
+                                        <td>
+                                            <button class="action-button edit-button" onclick="editModel(${model[0]})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('');
                             
                             modelTbody.innerHTML += modelRows;
                         } catch (error) {
@@ -2180,23 +2197,29 @@
                 return;
             }
             
-            tbody.innerHTML = providers.map(provider => `
-                <tr>
-                    <td>${provider[0]}</td>
-                    <td>${provider[1]}</td>
-                    <td>${provider[2]}</td>
-                    <td>${provider[4]}</td>
-                    <td>${provider[5] || ''}</td>
-                    <td>
-                        <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = providers.map(provider => {
+                const serverUrl = provider[2];
+                const displayUrl = truncateText(serverUrl);
+                const displayDesc = truncateText(provider[5]);
+                
+                return `
+                    <tr>
+                        <td>${provider[0]}</td>
+                        <td>${provider[1]}</td>
+                        <td title="${serverUrl}">${displayUrl}</td>
+                        <td>${provider[4]}</td>
+                        <td title="${provider[5] || ''}">${displayDesc}</td>
+                        <td>
+                            <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         // 更新API密钥表格
@@ -3046,6 +3069,14 @@
 
         // 只保留一个事件监听器
         document.addEventListener('DOMContentLoaded', initialize);
+
+        // 添加一个通用的文本截断函数
+        function truncateText(text, maxLength = 30) {
+            if (!text) return '';
+            return text.length > maxLength ? 
+                text.substring(0, maxLength - 3) + '...' : 
+                text;
+        }
     </script>
 </body>
 </html>
