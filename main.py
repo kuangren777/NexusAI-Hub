@@ -442,9 +442,10 @@ async def handle_chat_completions(request: Request):
         # 简化URL构建逻辑
         base_url = provider_info['server_url'].rstrip('/')
         
-        # 如果URL以'/'或'#'结尾，直接使用chat/completions
+        # 如果URL以'/'结尾，直接使用chat/completions
         if provider_info['server_url'].endswith(('/')):
             upstream_url = f"{base_url}/chat/completions"
+        # 如果URL以'#'结尾，后面不加任何内容
         elif provider_info['server_url'].endswith(('#')):
             upstream_url = f"{base_url}"
         else:
