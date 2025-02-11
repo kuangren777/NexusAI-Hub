@@ -18,6 +18,7 @@ from stats_tracker import StatsTracker
 import uuid
 import logging
 from datetime import datetime
+import re
 
 # 创建多个应用实例
 app_admin = FastAPI()  # 管理后台，例如端口8000
@@ -372,11 +373,11 @@ async def get_total_stats():
     return await stats_tracker.get_total_stats()
 
 # 添加一个通用的流式处理函数
-async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
-    """统一处理聊天请求，确保使用 v1 路径"""
+async def handle_chat_completions(request: Request):
+    """统一处理聊天请求，根据baseurl选择最终路径"""
     try:
         if DEBUG_MODE:
-            logger.info(f"开始处理新的请求，路径前缀: {path_prefix}")
+            logger.info(f"开始处理新的请求")
         
         # 获取Authorization header
         auth_header = request.headers.get("Authorization")
@@ -438,8 +439,18 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
 
         client = httpx.AsyncClient()
         
-        # 构建上游URL时始终使用 v1 路径
-        upstream_url = f"{provider_info['server_url'].rstrip('/')}/v1/chat/completions"
+        # 简化URL构建逻辑
+        base_url = provider_info['server_url'].rstrip('/')
+        
+        # 如果URL以'/'或'#'结尾，直接使用chat/completions
+        if provider_info['server_url'].endswith(('/')):
+            upstream_url = f"{base_url}/chat/completions"
+        elif provider_info['server_url'].endswith(('#')):
+            upstream_url = f"{base_url}"
+        else:
+            # 默认行为：添加 /v1/chat/completions
+            upstream_url = f"{base_url}/v1/chat/completions"
+
         if DEBUG_MODE:
             logger.info(f"上游请求URL: {upstream_url}")
         headers = {
@@ -517,72 +528,104 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
         
         async def stream_generator():
             completion_tokens = 0
-            try:
-                async with client.stream(
-                    'POST',
-                    upstream_url,
-                    json={**body, "stream": True},
-                    headers=headers,
-                    timeout=30.0
-                ) as response:
-                    if response.status_code != 200:
-                        error_response = await response.text()
-                        if DEBUG_MODE:
-                            logger.error(f"上游服务器错误: {response.status_code}, 响应内容: {error_response}")
+            retry_count = 3  # 最大重试次数
+            retry_delay = 2  # 重试间隔（秒）
+            
+            for attempt in range(retry_count):
+                try:
+                    if attempt > 0 and DEBUG_MODE:
+                        logger.info(f"第 {attempt + 1} 次尝试建立流式连接")
+                    
+                    async with client.stream(
+                        'POST',
+                        upstream_url,
+                        json={**body, "stream": True},
+                        headers=headers,
+                        timeout=60.0  # 增加超时时间
+                    ) as response:
+                        if response.status_code != 200:
+                            error_response = await response.aread()
+                            if DEBUG_MODE:
+                                logger.error(f"上游服务器错误: {response.status_code}, 响应内容: {error_response}")
+                            error_msg = {
+                                "error": {
+                                    "message": f"上游服务器错误: {response.status_code}",
+                                    "type": "upstream_error",
+                                    "code": response.status_code,
+                                    "upstream_response": error_response.decode('utf-8', errors='ignore')
+                                }
+                            }
+                            yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
+                            return
+
+                        async for line in response.aiter_lines():
+                            if line.strip():
+                                try:
+                                    if line.startswith('data: '):
+                                        line = line.removeprefix('data: ')
+                                    if DEBUG_MODE:
+                                        logger.info(f"尝试解析的行内容: {line}")
+                                    data = json.loads(line)
+                                    if "choices" in data and data["choices"]:
+                                        delta = data["choices"][0].get("delta", {})
+                                        if "content" in delta:
+                                            content = delta["content"]
+                                            completion_tokens += len(content.encode('utf-8')) // 4
+                                            if DEBUG_MODE:
+                                                logger.info(f"流式响应内容: {content}")
+                                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                                except json.JSONDecodeError as e:
+                                    if DEBUG_MODE:
+                                        logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
+                                    continue
+                                except Exception as e:
+                                    if DEBUG_MODE:
+                                        logger.error(f"处理流式响应时发生错误: {str(e)}")
+                                    continue
+                        
+                        break  # 如果成功完成流式传输，跳出重试循环
+                    
+                except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                    if DEBUG_MODE:
+                        logger.error(f"连接错误（第 {attempt + 1} 次尝试）：{str(e)}")
+                    if attempt == retry_count - 1:  # 最后一次尝试
                         error_msg = {
                             "error": {
-                                "message": f"上游服务器错误: {response.status_code}",
-                                "type": "upstream_error",
-                                "code": response.status_code,
-                                "upstream_response": error_response
+                                "message": "无法连接到上游服务器",
+                                "type": "connection_error",
+                                "code": 502,
+                                "details": str(e)
                             }
                         }
-                        if DEBUG_MODE:
-                            logger.error(f"流式响应错误: {error_msg}")
                         yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
-                        return
-
-                    async for line in response.aiter_lines():
-                        if line.strip():
-                            try:
-                                if line.startswith('data: '):
-                                    line = line.removeprefix('data: ')
-                                if DEBUG_MODE:
-                                    logger.info(f"尝试解析的行内容: {line}")
-                                data = json.loads(line)
-                                if "choices" in data and data["choices"]:
-                                    delta = data["choices"][0].get("delta", {})
-                                    if "content" in delta:
-                                        content = delta["content"]
-                                        completion_tokens += len(content.encode('utf-8')) // 4
-                                        if DEBUG_MODE:
-                                            logger.info(f"流式响应内容: {content}")
-                                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
-                            except json.JSONDecodeError as e:
-                                if DEBUG_MODE:
-                                    logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
-                                continue
-            except Exception as e:
-                error_msg = {
-                    "error": {
-                        "message": str(e),
-                        "type": "server_error",
-                        "code": 500
+                    else:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    
+                except Exception as e:
+                    if DEBUG_MODE:
+                        logger.error(f"流式响应异常: {str(e)}")
+                    error_msg = {
+                        "error": {
+                            "message": str(e),
+                            "type": "server_error",
+                            "code": 500
+                        }
                     }
-                }
-                if DEBUG_MODE:
-                    logger.error(f"流式响应异常: {str(e)}")
-                yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
-            finally:
-                if completion_tokens > 0:
-                    await stats_tracker.record_chat(
-                        conversation_id=conversation_id,
-                        provider_id=provider_id,
-                        model_name=model_name,
-                        tokens_count=completion_tokens,
-                        is_prompt=False
-                    )
-                await client.aclose()
+                    yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
+                    break
+                
+                finally:
+                    if completion_tokens > 0:
+                        await stats_tracker.record_chat(
+                            conversation_id=conversation_id,
+                            provider_id=provider_id,
+                            model_name=model_name,
+                            tokens_count=completion_tokens,
+                            is_prompt=False
+                        )
+
+            await client.aclose()
 
         return StreamingResponse(
             stream_generator(),
@@ -615,14 +658,12 @@ async def handle_chat_completions(request: Request, path_prefix: str = "/v1"):
 @app_api.post("/v1/chat/completions")
 async def chat_completions_v1(request: Request):
     """标准 v1 接口"""
-    return await handle_chat_completions(request, "/v1")
+    return await handle_chat_completions(request)
 
 @app_api.post("/chat/completions")
 async def chat_completions(request: Request):
-    """将非 v1 请求重定向到 v1 接口"""
-    if DEBUG_MODE:
-        logger.info("重定向非v1请求到v1接口")
-    return await handle_chat_completions(request, "/v1")
+    """将非版本号请求重定向到 v1 接口"""
+    return await handle_chat_completions(request)
 
 # 添加测试路由
 @app_admin.post("/test")
