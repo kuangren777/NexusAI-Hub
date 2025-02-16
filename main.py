@@ -19,6 +19,8 @@ import uuid
 import logging
 from datetime import datetime
 import re
+import traceback
+from my_tokenizer import Tokenizer
 
 # 创建多个应用实例
 app_admin = FastAPI()  # 管理后台，例如端口8000
@@ -34,6 +36,9 @@ init_db()
 
 # 初始化 StatsTracker
 stats_tracker = StatsTracker()
+
+# 初始化 Tokenizer
+tokenizer = Tokenizer()
 
 # 挂载静态文件目录到管理后台
 app_admin.mount("/static", StaticFiles(directory="static"), name="static")
@@ -170,6 +175,21 @@ async def websocket_endpoint(websocket: WebSocket):
     
     async def send_message(message: str, provider_id: int, model_name: str):
         try:
+            conversation_id = str(uuid.uuid4())
+            
+            # 计算并记录发送的prompt tokens
+            prompt_tokens = await tokenizer.count_tokens(message)
+            
+            logger.info(f"""
+WebSocket Token使用统计 [会话ID: {conversation_id}]
+------------------------
+发送统计:
+- 模型: {model_name}
+- Prompt Tokens: {prompt_tokens}
+- 提供商ID: {provider_id}
+------------------------
+""")
+            
             provider_info = get_provider_info(provider_id)
             if not provider_info:
                 await websocket.send_text(json.dumps({
@@ -185,6 +205,19 @@ async def websocket_endpoint(websocket: WebSocket):
 
             server_url = provider_info["server_url"]
             server_key = provider_info["server_key"]
+            
+            # 生成会话ID
+            conversation_id = str(uuid.uuid4())
+            
+            # 计算并记录发送的prompt tokens
+            prompt_tokens = await tokenizer.count_tokens(message)
+            await stats_tracker.record_chat(
+                conversation_id=conversation_id,
+                provider_id=provider_id,
+                model_name=model_name,
+                tokens_count=prompt_tokens,
+                is_prompt=True
+            )
             
             async with httpx.AsyncClient() as client:
                 headers = {
@@ -231,9 +264,53 @@ async def websocket_endpoint(websocket: WebSocket):
                                         }))
                             except json.JSONDecodeError:
                                 continue
+                    
+                    # 计算并记录接收到的completion tokens
+                    if current_content:
+                        completion_tokens = await tokenizer.count_tokens(current_content)
+                        await stats_tracker.record_chat(
+                            conversation_id=conversation_id,
+                            provider_id=provider_id,
+                            model_name=model_name,
+                            tokens_count=completion_tokens,
+                            is_prompt=False,
+                            message=current_content  # 记录完整的响应消息
+                        )
+                
+            # 在接收完整响应后
+            if current_content:
+                completion_tokens = await tokenizer.count_tokens(current_content)
+                
+                logger.info(f"""
+WebSocket Token使用统计 [会话ID: {conversation_id}]
+------------------------
+接收统计:
+- 模型: {model_name}
+- Completion Tokens: {completion_tokens}
+- 总计 Tokens: {prompt_tokens + completion_tokens}
+- 提供商ID: {provider_id}
+------------------------
+""")
+                
+                await stats_tracker.record_chat(
+                    conversation_id=conversation_id,
+                    provider_id=provider_id,
+                    model_name=model_name,
+                    tokens_count=completion_tokens,
+                    is_prompt=False,
+                    message=current_content
+                )
                 
         except Exception as e:
-            print(f"错误详情: {str(e)}")
+            logger.error(f"""
+WebSocket错误 [会话ID: {conversation_id if 'conversation_id' in locals() else 'N/A'}]
+------------------------
+- 模型: {model_name}
+- 错误类型: {type(e).__name__}
+- 错误信息: {str(e)}
+- 提供商ID: {provider_id}
+------------------------
+""")
             await websocket.send_text(json.dumps({
                 "error": f"错误: {str(e)}"
             }))
@@ -376,8 +453,23 @@ async def get_total_stats():
 async def handle_chat_completions(request: Request):
     """统一处理聊天请求，根据baseurl选择最终路径"""
     try:
+        body = await request.json()
+        messages = body.get("messages", [])
+        
+        # 尝试从最后一条用户消息中找到相关会话
+        conversation_id = None
+        if messages:
+            last_message = messages[-1].get("content", "")
+            last_conversation = await stats_tracker.get_last_conversation(last_message)
+            if last_conversation:
+                conversation_id = last_conversation["conversation_id"]
+        
+        # 如果没找到相关会话，创建新的会话ID
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+        
         if DEBUG_MODE:
-            logger.info(f"开始处理新的请求")
+            logger.info(f"开始处理新的请求 [会话ID: {conversation_id}]")
         
         # 获取Authorization header
         auth_header = request.headers.get("Authorization")
@@ -393,8 +485,9 @@ async def handle_chat_completions(request: Request):
         is_stream = body.get("stream", False)
         
         if DEBUG_MODE:
-            logger.info(f"请求体: {json.dumps(body, ensure_ascii=False, indent=2)}")
-            logger.info(f"请求头: {dict(request.headers)}")
+            if DEBUG_MODE == "Detail":
+                logger.info(f"请求体: {json.dumps(body, ensure_ascii=False, indent=2)}")
+                logger.info(f"请求头: {dict(request.headers)}")
             logger.info(f"是否使用流式传输: {is_stream}")
         
         model_name = body.get("model")
@@ -422,12 +515,19 @@ async def handle_chat_completions(request: Request):
                 logger.error(f"不支持的模型: {model_name}")
             raise HTTPException(status_code=400, detail="不支持的模型")
         
-        # 生成会话ID
-        conversation_id = request.headers.get("X-Conversation-Id", str(uuid.uuid4()))
+        # 计算并记录发送的prompt tokens
+        prompt_text = "\n".join([msg.get("content", "") for msg in messages])
+        prompt_tokens = await tokenizer.count_tokens(prompt_text)
         
-        # 计算tokens
-        messages = body.get("messages", [])
-        prompt_tokens = sum(len(str(msg.get("content", "")).encode('utf-8')) // 4 for msg in messages)
+        logger.info(f"""
+Token使用统计 [会话ID: {conversation_id}]
+------------------------
+发送统计:
+- 模型: {model_name}
+- Prompt Tokens: {prompt_tokens}
+- 提供商ID: {provider_id}
+------------------------
+""")
         
         await stats_tracker.record_chat(
             conversation_id=conversation_id,
@@ -519,6 +619,33 @@ async def handle_chat_completions(request: Request):
             if DEBUG_MODE:
                 logger.info(f"非流式响应内容: {response.text}")
             
+            # 在成功接收响应后
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get("choices") and len(response_data["choices"]) > 0:
+                    completion_text = response_data["choices"][0].get("message", {}).get("content", "")
+                    completion_tokens = await tokenizer.count_tokens(completion_text)
+                    
+                    logger.info(f"""
+Token使用统计 [会话ID: {conversation_id}]
+------------------------
+接收统计:
+- 模型: {model_name}
+- Completion Tokens: {completion_tokens}
+- 总计 Tokens: {prompt_tokens + completion_tokens}
+- 提供商ID: {provider_id}
+------------------------
+""")
+                    
+                    await stats_tracker.record_chat(
+                        conversation_id=conversation_id,
+                        provider_id=provider_id,
+                        model_name=model_name,
+                        tokens_count=completion_tokens,
+                        is_prompt=False,
+                        message=completion_text
+                    )
+            
             return Response(
                 content=response.text,
                 media_type="application/json"
@@ -528,105 +655,94 @@ async def handle_chat_completions(request: Request):
             logger.info("使用流式响应")
         
         async def stream_generator():
-            completion_tokens = 0
-            retry_count = 3  # 最大重试次数
-            retry_delay = 2  # 重试间隔（秒）
-            
-            for attempt in range(retry_count):
-                try:
-                    if attempt > 0 and DEBUG_MODE:
-                        logger.info(f"第 {attempt + 1} 次尝试建立流式连接")
-                    
-                    async with client.stream(
-                        'POST',
-                        upstream_url,
-                        json={**body, "stream": True},
-                        headers=headers,
-                        timeout=60.0  # 增加超时时间
-                    ) as response:
-                        if response.status_code != 200:
-                            error_response = await response.aread()
-                            if DEBUG_MODE:
-                                logger.error(f"上游服务器错误: {response.status_code}, 响应内容: {error_response}")
-                            error_msg = {
-                                "error": {
-                                    "message": f"上游服务器错误: {response.status_code}",
-                                    "type": "upstream_error",
-                                    "code": response.status_code,
-                                    "upstream_response": error_response.decode('utf-8', errors='ignore')
-                                }
-                            }
-                            yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
-                            return
-
-                        async for line in response.aiter_lines():
-                            if line.strip():
-                                try:
-                                    if line.startswith('data: '):
-                                        line = line.removeprefix('data: ')
-                                    if DEBUG_MODE:
-                                        logger.info(f"尝试解析的行内容: {line}")
-                                    data = json.loads(line)
-                                    if "choices" in data and data["choices"]:
-                                        delta = data["choices"][0].get("delta", {})
-                                        if "content" in delta:
-                                            content = delta["content"]
-                                            completion_tokens += len(content.encode('utf-8')) // 4
-                                            if DEBUG_MODE:
-                                                logger.info(f"流式响应内容: {content}")
-                                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
-                                except json.JSONDecodeError as e:
-                                    if DEBUG_MODE:
-                                        logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
-                                    continue
-                                except Exception as e:
-                                    if DEBUG_MODE:
-                                        logger.error(f"处理流式响应时发生错误: {str(e)}")
-                                    continue
-                        
-                        break  # 如果成功完成流式传输，跳出重试循环
-                    
-                except (httpx.ConnectError, httpx.ReadTimeout) as e:
-                    if DEBUG_MODE:
-                        logger.error(f"连接错误（第 {attempt + 1} 次尝试）：{str(e)}")
-                    if attempt == retry_count - 1:  # 最后一次尝试
+            current_content = ""
+            try:
+                async with client.stream(
+                    'POST',
+                    upstream_url,
+                    json={**body, "stream": True},
+                    headers=headers,
+                    timeout=60.0
+                ) as response:
+                    if response.status_code != 200:
+                        error_response = await response.aread()
+                        if DEBUG_MODE:
+                            logger.error(f"上游服务器错误: {response.status_code}, 响应内容: {error_response}")
                         error_msg = {
                             "error": {
-                                "message": "无法连接到上游服务器",
-                                "type": "connection_error",
-                                "code": 502,
-                                "details": str(e)
+                                "message": f"上游服务器错误: {response.status_code}",
+                                "type": "upstream_error",
+                                "code": response.status_code,
+                                "upstream_response": error_response.decode('utf-8', errors='ignore')
                             }
                         }
                         yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
-                    else:
-                        await asyncio.sleep(retry_delay)
-                        continue
+                        return
+
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            try:
+                                if line.startswith('data: '):
+                                    line = line.removeprefix('data: ')
+                                if DEBUG_MODE == "Detail":
+                                    logger.info(f"尝试解析的行内容: {line}")
+                                data = json.loads(line)
+                                if "choices" in data and data["choices"]:
+                                    delta = data["choices"][0].get("delta", {})
+                                    if "content" in delta:
+                                        content = delta["content"]
+                                        current_content += content
+                                        if DEBUG_MODE == "Detail":
+                                            logger.info(f"流式响应内容: {content}")
+                                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                            except json.JSONDecodeError as e:
+                                if DEBUG_MODE:
+                                    logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
+                                continue
+                            except Exception as e:
+                                if DEBUG_MODE:
+                                    logger.error(f"处理流式响应时发生错误: {str(e)}")
+                                continue
                     
-                except Exception as e:
-                    if DEBUG_MODE:
-                        logger.error(f"流式响应异常: {str(e)}")
-                    error_msg = {
-                        "error": {
-                            "message": str(e),
-                            "type": "server_error",
-                            "code": 500
-                        }
-                    }
-                    yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
-                    break
-                
-                finally:
-                    if completion_tokens > 0:
+                    # 在流式响应结束后记录完整的completion tokens
+                    if current_content:
+                        completion_tokens = await tokenizer.count_tokens(current_content)
+                        
+                        logger.info(f"""
+Token使用统计 [会话ID: {conversation_id}]
+------------------------
+流式响应统计:
+- 模型: {model_name}
+- Prompt Tokens: {prompt_tokens}
+- Completion Tokens: {completion_tokens}
+- 总计 Tokens: {prompt_tokens + completion_tokens}
+- 提供商ID: {provider_id}
+------------------------
+""")
+                        
                         await stats_tracker.record_chat(
                             conversation_id=conversation_id,
                             provider_id=provider_id,
                             model_name=model_name,
                             tokens_count=completion_tokens,
-                            is_prompt=False
+                            is_prompt=False,
+                            message=current_content
                         )
 
-            await client.aclose()
+            except Exception as e:
+                logger.error(f"""
+错误统计 [会话ID: {conversation_id}]
+------------------------
+- 模型: {model_name}
+- 错误类型: {type(e).__name__}
+- 错误信息: {str(e)}
+- 提供商ID: {provider_id}
+------------------------
+""")
+                # ... 错误处理代码 ...
+            
+            finally:
+                await client.aclose()
 
         return StreamingResponse(
             stream_generator(),
@@ -642,10 +758,15 @@ async def handle_chat_completions(request: Request):
         )
 
     except Exception as e:
-        if DEBUG_MODE:
-            import traceback
-            error_traceback = traceback.format_exc()
-            logger.error(f"处理请求时发生错误: {str(e)}\n堆栈跟踪:\n{error_traceback}")
+        logger.error(f"""
+系统错误 [会话ID: {conversation_id if 'conversation_id' in locals() else 'N/A'}]
+------------------------
+- 错误类型: {type(e).__name__}
+- 错误信息: {str(e)}
+- 堆栈跟踪:
+{traceback.format_exc()}
+------------------------
+""")
         raise HTTPException(
             status_code=500, 
             detail={

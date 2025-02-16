@@ -5,3 +5,4 @@
 /data
 /logs
 /test_results
+/config/tokenizer_config.py

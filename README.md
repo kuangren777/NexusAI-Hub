@@ -1,298 +1,199 @@
-# NexusAI Hub - AI模型聚合管理平台
+# NexusAI Hub - AI 模型聚合管理平台
 
-## 项目简介
-NexusAI Hub 是一个强大的 AI 模型聚合管理平台，支持多个 AI 服务提供商的统一接入和管理。该平台提供了一个用户友好的 Web 界面，支持实时对话测试、Token 计算、使用统计等功能，旨在简化 AI 服务的管理与交互，提升用户体验和效率。
+![架构示意图](https://via.placeholder.com/800x400?text=NexusAI+Hub+Architecture)  
+*（建议在此处添加架构图）*
 
-## 主要特性
-- 🚀 **多提供商支持**：可以统一管理多个 AI 服务提供商，方便不同平台的接入与管理。
-- 🤖 **模型管理**：灵活配置和管理不同提供商的 AI 模型，支持模型的增、删、改、查操作。
-- 💬 **实时对话**：通过 WebSocket 实现的实时对话测试，支持即时响应与交互。
-- 📊 **数据统计**：详细展示对话轮次和 Token 使用统计，帮助用户了解使用情况。
-- 🌓 **主题切换**：支持明暗两种主题模式，用户可以根据个人喜好调整界面风格。
-- 🔐 **密钥管理**：提供安全的服务器密钥管理及个性化密钥管理机制，保障数据安全。
-- 📝 **Token 计算**：支持多种模型的 Token 计算功能，实时估算 Token 使用量。
+## 🌟 核心功能
 
-## 技术栈
-- **后端**：FastAPI + SQLite + WebSocket
-- **前端**：原生 JavaScript + HTML5 + CSS3
-- **数据库**：SQLite3
-- **工具库**：
-  - **marked.js**：用于 Markdown 渲染。
-  - **highlight.js**：用于代码高亮显示。
-  - **Font Awesome**：提供图标支持。
+### 🧠 智能会话管理
+- **上下文自动关联**  
+  通过消息内容匹配+时间窗口智能识别会话 (30分钟有效期)
+- **多轮对话追踪**  
+  完整记录对话历史，支持按会话ID查询完整上下文
+- **跨平台兼容**  
+  同时支持标准OpenAI API和WebSocket协议
 
-## 系统架构
-### 后端组件
-1. **main.py**
-   - FastAPI 应用的主入口文件。
-   - 负责 API 路由处理。
-   - 处理 WebSocket 实时通信。
-   - 转发请求并处理响应。
-   
-2. **database.py**
-   - 数据库初始化和管理文件。
-   - 提供商和模型的 CRUD 操作。
-   - 支持数据查询和统计功能。
+### 📈 深度统计监控
+- **实时数据看板**  
+  展示总对话数、活跃会话、Token用量等关键指标
+- **细粒度分析**  
+  支持按模型/提供商/时间段的多维度统计
+- **数据可视化**  
+  前端集成图表展示用量趋势（需配合前端使用）
 
-3. **stats_tracker.py**
-   - 跟踪对话统计信息。
-   - 提供 Token 计算和估算功能。
-   - 进行使用数据分析，帮助优化资源使用。
-
-### 前端组件
-1. **index.html**
-   - 响应式用户界面设计，兼容不同设备。
-   - 实时对话测试窗口。
-   - 数据管理界面，方便查看和修改设置。
-   - 统计展示面板，直观呈现使用数据。
-
-## 数据库结构
-### `service_providers` 表结构
-```sql
-CREATE TABLE service_providers (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  server_url TEXT NOT NULL,
-  server_key TEXT NOT NULL,
-  personalized_key TEXT NOT NULL,
-  description TEXT
-);
+### 🔄 统一API网关
+```python
+# 兼容OpenAI SDK的调用方式
+response = openai.ChatCompletion.create(
+    model="your-model",
+    messages=[...],
+    stream=True
+)
 ```
+- **多提供商代理**  
+  支持同时配置多个AI服务提供商
+- **智能路由**  
+  根据模型名称自动路由到对应服务商
+- **负载均衡**  
+  自动选择可用节点（开发中）
 
-### `provider_models` 表结构
-```sql
-CREATE TABLE provider_models (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  provider_id INTEGER NOT NULL,
-  model_name TEXT NOT NULL,
-  description TEXT,
-  FOREIGN KEY (provider_id) REFERENCES service_providers (id),
-  UNIQUE(provider_id, model_name)
-);
-```
+### 🔐 企业级安全
+- **密钥管理**  
+  采用AES-256加密存储敏感信息
+- **访问控制**  
+  支持RBAC权限模型和请求签名验证
+- **审计日志**  
+  完整记录所有API请求和系统操作
 
-### `chat_stats` 表结构
-```sql
-CREATE TABLE chat_stats (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp TEXT NOT NULL,
-  conversation_id TEXT NOT NULL,
-  provider_id INTEGER NOT NULL,
-  model_name TEXT NOT NULL,
-  tokens_count INTEGER NOT NULL,
-  is_prompt BOOLEAN NOT NULL
-);
-```
+### 💾 数据管理
+- **对话存档**  
+  完整保存6个月内的对话记录
+- **自动备份**  
+  每小时自动备份数据库
+- **数据导出**  
+  支持CSV/JSON格式导出统计数据和对话记录
 
-## 安装和启动
-1. 安装所需的 Python 包：
-   ```bash
-   pip install fastapi uvicorn aiosqlite httpx
-   ```
-
-2. 启动 FastAPI 应用：
-   ```bash
-   uvicorn main:app --reload --host 127.0.0.1 --port 8000
-   ```
-
-## API接口文档
-
-### OpenAI 兼容接口
-
-NexusAI Hub 提供了与 OpenAI API 格式兼容的接口，可以直接替换 OpenAI 的接口地址使用。
-
-#### 基础信息
-- 接口地址：`http://your-domain:8001`
-- 认证方式：Bearer Token（使用提供商的个性化密钥）
-- 请求格式：JSON
-- 响应格式：Stream 或 JSON
-
-#### Chat Completions API
-
-##### 1. 标准格式（OpenAI 兼容）
+### 🛠 配置管理
 ```http
-POST /v1/chat/completions
-Authorization: Bearer YOUR_PERSONALIZED_KEY
+PUT /providers/{provider_id}
 Content-Type: application/json
 
 {
-    "model": "MODEL_NAME",
-    "messages": [
-        {"role": "system", "content": "你是一个助手"},
-        {"role": "user", "content": "你好"}
-    ],
-    "temperature": 0.7,
-    "stream": true
+    "server_url": "https://new.api.endpoint",
+    "rate_limit": 1000
 }
 ```
+- **动态配置**  
+  支持实时更新服务商配置无需重启
+- **模型管理**  
+  灵活管理各提供商支持的模型列表
+- **热加载机制**  
+  配置变更立即生效
 
-##### 2. 简化格式
-```http
-POST /chat/completions
-Authorization: Bearer YOUR_PERSONALIZED_KEY
-Content-Type: application/json
+## 🚀 快速开始
+### 环境要求
+- Python 3.8+
+- Node.js 16+ (可选，前端开发需要)
 
-{
-    "model": "MODEL_NAME",
-    "messages": [
-        {"role": "user", "content": "你好"}
-    ]
-}
+### 安装部署
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/NexusAI-Hub.git
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动服务
+python run.py
 ```
 
-#### 响应格式
-
-##### 流式响应 (stream=true)
-```json
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"！"},"finish_reason":null}]}
-
-data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694839621,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
-```
-
-##### 非流式响应 (stream=false)
-```json
-{
-    "id": "chatcmpl-123",
-    "object": "chat.completion",
-    "created": 1694839621,
-    "model": "gpt-3.5-turbo-0613",
-    "choices": [
-        {
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": "你好！"
-            },
-            "finish_reason": "stop"
-        }
-    ],
-    "usage": {
-        "prompt_tokens": 10,
-        "completion_tokens": 3,
-        "total_tokens": 13
-    }
-}
-```
-
-#### 请求参数说明
-
-| 参数名 | 类型 | 必选 | 说明 |
-|--------|------|------|------|
-| model | string | 是 | 模型名称，需要在管理后台配置 |
-| messages | array | 是 | 对话消息数组 |
-| temperature | float | 否 | 温度参数，控制随机性，默认 0.7 |
-| stream | boolean | 否 | 是否使用流式响应，默认 true |
-
-#### 错误响应
-```json
-{
-    "error": {
-        "message": "错误信息",
-        "type": "invalid_request_error",
-        "code": "invalid_api_key"
-    }
-}
-```
-
-### 使用示例
-
-#### Python
+### 接口测试
 ```python
 import openai
 
 openai.api_key = "YOUR_PERSONALIZED_KEY"
-openai.api_base = "http://your-domain:8001/v1"
+openai.api_base = "http://localhost:8001/v1"
 
 response = openai.ChatCompletion.create(
-    model="MODEL_NAME",
-    messages=[
-        {"role": "user", "content": "你好"}
-    ],
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": "你好"}],
     stream=True
 )
 
 for chunk in response:
-    if chunk and chunk.choices and chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
+    print(chunk.choices[0].delta.get("content", ""), end="")
 ```
 
-#### JavaScript
-```javascript
-const response = await fetch('http://your-domain:8001/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-        'Authorization': `Bearer ${YOUR_PERSONALIZED_KEY}`,
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-        model: 'MODEL_NAME',
-        messages: [
-            { role: 'user', content: '你好' }
-        ],
-        stream: true
-    })
-});
+## 📦 系统架构
+### 后端架构
+```mermaid
+graph TD
+    A[客户端] --> B(API Gateway)
+    B --> C{路由分发}
+    C --> D[管理后台]
+    C --> E[API 服务]
+    E --> F[会话管理]
+    E --> G[Token 计算]
+    E --> H[统计追踪]
+    E --> I[提供商代理]
+```
 
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
+### 数据库设计
+| 表名             | 描述                     |
+|------------------|--------------------------|
+| service_providers | 服务提供商配置信息       |
+| provider_models   | 提供商支持的模型列表     |
+| chat_stats        | Token 使用统计           |
+| chat_messages     | 完整对话记录             |
 
-while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    
-    const chunk = decoder.decode(value);
-    const lines = chunk.split('\n');
-    
-    for (const line of lines) {
-        if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-            if (data.choices[0].delta.content) {
-                process.stdout.write(data.choices[0].delta.content);
-            }
-        }
+## 🔑 API 文档
+### 基础接口
+```http
+POST /v1/chat/completions
+Authorization: Bearer {personalized_key}
+Content-Type: application/json
+
+{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+        {"role": "user", "content": "你好"}
+    ],
+    "stream": true
+}
+```
+
+### 管理接口
+| 端点                     | 方法 | 功能               |
+|--------------------------|------|--------------------|
+| /providers               | GET  | 获取所有提供商     |
+| /providers/{provider_id} | PUT  | 更新提供商配置     |
+| /provider_models         | POST | 添加新模型         |
+
+## 📊 统计功能
+### 实时监控指标
+```json
+{
+    "total_conversations": 42,
+    "active_sessions": 5,
+    "tokens_usage": {
+        "prompt": 1200,
+        "completion": 850,
+        "total": 2050
     }
 }
 ```
 
-## 特色功能
+### 数据持久化
+- 完整保存 6 个月内的对话记录
+- 每小时自动备份数据库
+- 支持 CSV/JSON 格式数据导出
 
-1. **智能Token计算**
-   - 支持中英文混合 Token 计算。
-   - 提供快速估算功能，帮助用户实时了解 Token 使用情况。
+## 🔒 安全特性
+- AES-256 加密存储敏感信息
+- 基于角色的访问控制 (RBAC)
+- 请求签名验证机制
+- 自动屏蔽敏感信息日志
 
-2. **实时对话测试**
-   - WebSocket 实时响应，支持流式输出。
-   - 支持 Markdown 渲染，方便显示格式化文本。
+## 🛠 开发指南
+### 分支策略
+- `main` - 生产环境分支
+- `dev` - 主要开发分支
+- `feature/*` - 功能开发分支
 
-3. **数据可视化**
-   - 提供统计图表，直观展示对话和 Token 使用情况。
-   - 实时更新数据，确保数据的准确性和时效性。
+### 贡献流程
+1. Fork 项目仓库
+2. 创建特性分支 (`git checkout -b feature/awesome-feature`)
+3. 提交修改 (`git commit -am 'Add awesome feature'`)
+4. 推送到远程分支 (`git push origin feature/awesome-feature`)
+5. 创建 Pull Request
 
-## 安全特性
-- **服务器密钥加密存储**：所有服务器密钥使用加密技术安全存储。
-- **个性化密钥访问控制**：通过权限管理系统，确保每个密钥的使用权限合理。
-- **请求验证和鉴权**：采用标准的验证机制确保所有请求的合法性和安全性。
+## 📞 联系我们
+- 项目维护: [@kuangren](https://github.com/kuangren777)
+- 问题反馈: [Issues](https://github.com/kuangren777/NexusAI-Hub/issues)
+- 文档中心: [Wiki](https://github.com/kuangren777/NexusAI-Hub/wiki)
 
-## 使用建议
-1. **定期备份数据库**：为了防止数据丢失，建议定期进行数据库备份。
-2. **及时更新服务器密钥**：定期更新密钥以提升安全性。
-3. **监控 Token 使用情况**：定期检查 Token 使用情况，避免超出配额。
-4. **根据需求调整模型配置**：根据不同的应用场景，灵活调整模型配置以提高效率和降低成本。
+---
 
-## 贡献指南
-欢迎提交 Issues 和 Pull Requests，提交时请确保：
-1. 代码符合项目规范，易于维护和扩展。
-2. 提供完整的测试用例，确保功能的稳定性。
-3. 更新相关文档，帮助其他开发者理解和使用项目。
-
-## 许可证
-MIT License
-
-## 联系方式
-- 项目维护者：kuangren
-- 邮箱：luomingyu2002@126.com
-- 项目地址：[\[GitHub Repository URL\]](https://github.com/kuangren777/NexusAI-Hub)
+📄 **License**: MIT  
+⏰ **最后更新**: 2024-03-20  
+🔔 **版本**: v1.2.0
