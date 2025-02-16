@@ -3,42 +3,96 @@
 ## 📦 系统架构
 
 ### 详细架构图
-
 ```mermaid
-mermaid
 graph TD
-A[客户端] --> B{API Gateway}
-B --> C[管理后台]
-B --> D[API 服务]
-subgraph API 服务
-D --> E[身份验证]
-E --> F[请求路由]
-F --> G[负载均衡]
-G --> H[提供商代理]
-end
-subgraph 数据层
-H --> I[(数据库)]
-I --> J[SQLite]
-H --> K[缓存]
-K --> L[Redis]
-end
-subgraph 监控系统
-M[Prometheus]
-N[Grafana]
-O[日志收集]
-end
-D --> M
-D --> N
-D --> O
-subgraph 提供商集群
-P[OpenAI]
-Q[Azure AI]
-R[自定义模型]
-end
-H --> P
-H --> Q
-H --> R
+    A[Web/APP客户端] --> B{API Gateway}
+    B --> C[管理后台]
+    B --> D[API 服务]
+    
+    subgraph API服务层
+        D --> E[身份验证模块]
+        E --> F[智能路由引擎]
+        F --> G[负载均衡器]
+        G --> H[提供商代理]
+        H --> I[会话管理]
+        H --> J[Token计算]
+        H --> K[统计追踪]
+    end
+    
+    subgraph 数据持久层
+        L[(SQLite数据库)] --> M[服务商配置]
+        L --> N[模型列表]
+        L --> O[对话记录]
+        L --> P[统计信息]
+        Q[(Redis缓存)] --> R[会话状态]
+        Q --> S[限流数据]
+    end
+    
+    subgraph 监控告警层
+        T[Prometheus] --> U[指标采集]
+        V[Grafana] --> W[数据可视化]
+        X[ELK Stack] --> Y[日志分析]
+        Z[AlertManager] --> AA[异常告警]
+    end
+    
+    D --> T
+    D --> X
+    H --> Q
+    
+    subgraph 外部服务集群
+        AB[OpenAI]
+        AC[Azure AI]
+        AD[自定义模型]
+        AE[文心一言]
+    end
+    
+    H --> AB
+    H --> AC
+    H --> AD
+    H --> AE
 ```
+
+### 核心模块说明
+1. **网关层**  
+   - 基于 FastAPI 构建的 API Gateway
+   - 支持 HTTP/WebSocket 双协议
+   - 请求速率限制（1000 QPS）
+   - 流量控制与熔断机制
+
+2. **服务层**  
+   ```python
+   # main.py 核心处理流程
+   async def handle_chat_completions(request: Request):
+       # 身份验证 -> 路由选择 -> 请求转发 -> 响应处理
+       # 完整记录统计数据和对话日志
+   ```
+   - 动态路由机制：根据模型名称自动选择服务商
+   - 会话管理系统：30分钟自动会话续期
+   - Token计算引擎：精确统计中英文混合内容
+
+3. **数据层**  
+   ```python
+   # stats_tracker.py 数据记录
+   async def record_chat(self, conversation_id, provider_id, 
+                        model_name, tokens_count, is_prompt, message):
+       # 同时写入SQLite和Redis
+   ```
+   - 双存储引擎：SQLite（持久化）+ Redis（缓存）
+   - ACID 事务支持
+   - 自动数据归档（6个月保留期）
+
+4. **监控层**  
+   - 实时采集API延迟、错误率等指标
+   - Grafana 看板示例：
+   ```mermaid
+   graph LR
+     A[Prometheus] --> B((API成功率))
+     A --> C[请求延迟P99]
+     A --> D[Token使用量]
+     B --> E{Grafana看板}
+     C --> E
+     D --> E
+   ```
 
 ## 🌟 核心功能
 
