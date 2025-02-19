@@ -21,6 +21,10 @@ from datetime import datetime
 import re
 import traceback
 from my_tokenizer import Tokenizer
+from save_messages import save_message_to_file
+from warnings import filterwarnings
+
+filterwarnings("ignore", category=DeprecationWarning)
 
 # 创建多个应用实例
 app_admin = FastAPI()  # 管理后台，例如端口8000
@@ -537,6 +541,19 @@ Token使用统计 [会话ID: {conversation_id}]
             is_prompt=True
         )
 
+        # 保存请求信息
+        save_message_to_file({
+            "timestamp": datetime.now().isoformat(),
+            "headers": dict(request.headers),
+            "target_url": str(request.url),
+            "client_host": request.client.host if request.client else None,
+            "request_body": body,
+            "conversation_content": {
+                "prompt": prompt_text,
+                "completion": ""  # 稍后补充
+            }
+        })
+
         client = httpx.AsyncClient()
         
         # 简化URL构建逻辑
@@ -645,6 +662,15 @@ Token使用统计 [会话ID: {conversation_id}]
                         is_prompt=False,
                         message=completion_text
                     )
+
+                # 更新保存的完成内容
+                if completion_text:
+                    save_message_to_file({
+                        "timestamp": datetime.now().isoformat(),
+                        "conversation_content": {
+                            "completion": completion_text
+                        }
+                    })
             
             return Response(
                 content=response.text,
@@ -680,32 +706,50 @@ Token使用统计 [会话ID: {conversation_id}]
                         return
 
                     async for line in response.aiter_lines():
-                        if line.strip():
-                            try:
-                                if line.startswith('data: '):
-                                    line = line.removeprefix('data: ')
-                                if DEBUG_MODE == "Detail":
-                                    logger.info(f"尝试解析的行内容: {line}")
-                                data = json.loads(line)
-                                if "choices" in data and data["choices"]:
-                                    delta = data["choices"][0].get("delta", {})
-                                    if "content" in delta:
-                                        content = delta["content"]
-                                        current_content += content
-                                        if DEBUG_MODE == "Detail":
-                                            logger.info(f"流式响应内容: {content}")
-                                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
-                            except json.JSONDecodeError as e:
-                                if DEBUG_MODE:
-                                    logger.error(f"JSON解析错误: {str(e)}, 原始内容: {line}")
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        # 处理特殊结束标记
+                        if line == "[DONE]":
+                            if DEBUG_MODE:
+                                logger.info("接收到流式结束标记 [DONE]")
+                            continue  # 跳过特殊标记
+                        
+                        try:
+                            # 移除可能的前缀
+                            if line.startswith('data: '):
+                                line = line[6:].strip()
+                            
+                            # 跳过空数据和特殊标记
+                            if not line or line in ('[DONE]', 'data: [DONE]'):
                                 continue
-                            except Exception as e:
-                                if DEBUG_MODE:
-                                    logger.error(f"处理流式响应时发生错误: {str(e)}")
-                                continue
+                            
+                            if DEBUG_MODE == "Detail":
+                                logger.info(f"尝试解析的行内容: {line}")
+                            
+                            data = json.loads(line)
+                            
+                            if "choices" in data and data["choices"]:
+                                delta = data["choices"][0].get("delta", {})
+                                if "content" in delta:
+                                    content = delta["content"]
+                                    current_content += content
+                                    if DEBUG_MODE == "Detail":
+                                        logger.info(f"流式响应内容: {content}")
+                                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                        except json.JSONDecodeError as e:
+                            if DEBUG_MODE:
+                                logger.warning(f"跳过无法解析的数据: {line} | 错误: {str(e)}")
+                            continue  # 跳过无效数据继续处理
+                        except Exception as e:
+                            if DEBUG_MODE:
+                                logger.error(f"处理数据时发生意外错误: {str(e)}")
+                            continue
                     
-                    # 在流式响应结束后记录完整的completion tokens
+                    # 在流式响应结束后保存完整内容
                     if current_content:
+
                         completion_tokens = await tokenizer.count_tokens(current_content)
                         
                         logger.info(f"""
@@ -719,15 +763,12 @@ Token使用统计 [会话ID: {conversation_id}]
 - 提供商ID: {provider_id}
 ------------------------
 """)
-                        
-                        await stats_tracker.record_chat(
-                            conversation_id=conversation_id,
-                            provider_id=provider_id,
-                            model_name=model_name,
-                            tokens_count=completion_tokens,
-                            is_prompt=False,
-                            message=current_content
-                        )
+                        save_message_to_file({
+                            "timestamp": datetime.now().isoformat(),
+                            "conversation_content": {
+                                "completion": current_content
+                            }
+                        })
 
             except Exception as e:
                 logger.error(f"""
