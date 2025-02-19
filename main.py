@@ -61,6 +61,8 @@ class ServiceProvider(BaseModel):
     description: str = ""
 
 class ProviderModel(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     provider_id: int
     model_name: str
     description: str = ""
