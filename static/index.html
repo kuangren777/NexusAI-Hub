@@ -19,6 +19,7 @@
             --error-color: #F85149;
             --hover-color: #F6F8FA;
             --shadow-color: rgba(0, 0, 0, 0.1);
+            --primary-rgb: 0, 229, 255; /* 添加新的RGB值 */
         }
 
         /* 暗色主题的变量 */
@@ -907,6 +908,53 @@
         .submit-button:hover {
             background-color: var(--secondary-color);
         }
+
+        .copyable {
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            padding-right: 28px;
+            border-radius: 6px;
+            padding: 4px 10px;
+            margin: -4px -10px;
+        }
+        
+        .copyable:hover {
+            color: var(--primary-color);
+            background: rgba(var(--primary-rgb), 0.08);
+        }
+        
+        .copied-feedback {
+            animation: gentlePulse 0.6s ease;
+            background: rgba(var(--primary-rgb), 0.1) !important;
+        }
+        
+        .copyable::after {
+            content: "\f0ea"; /* Font Awesome 的复制图标 */
+            font-family: "Font Awesome 5 Free";
+            position: absolute;
+            right: 8px;
+            top: 55%;
+            transform: translateY(-50%);
+            opacity: 0.6;
+            font-size: 14px;
+            font-weight: 900;
+            color: var(--text-secondary);
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        
+        .copyable:hover::after {
+            opacity: 1;
+            color: var(--primary-color);
+            transform: translateY(-55%) scale(1.05);
+            text-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.2);
+        }
+
+        @keyframes gentlePulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.96); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
@@ -1484,14 +1532,17 @@
                             }
                             
                             const modelRows = modelsData.models.map(model => {
-                                const displayModelName = truncateText(model[2]);
-                                const displayDesc = truncateText(model[3]);
+                                const modelName = model[2].replace(/'/g, "\\'"); // 转义单引号
+                                const displayModelName = truncateText(model[2], 30);  // 模型名称保持较长的显示
+                                const displayDesc = truncateText(model[3], 20);  // 描述使用较短的显示
                                 
                                 return `
                                     <tr>
                                         <td>${modelCounter++}</td>
                                         <td>${provider[1]}</td>
-                                        <td title="${model[2]}">${displayModelName}</td>
+                                        <td title="${modelName}" class="copyable" onclick="copyToClipboard('${modelName}', this)">
+                                            ${displayModelName}
+                                        </td>
                                         <td title="${model[3] || ''}">${displayDesc}</td>
                                         <td>
                                             <button class="action-button edit-button" onclick="editModel(${model[0]})">
@@ -1912,14 +1963,17 @@
                             if (!modelsData.models || !Array.isArray(modelsData.models)) continue;
                             
                             const modelRows = modelsData.models.map(model => {
-                                const displayModelName = truncateText(model[2]);
-                                const displayDesc = truncateText(model[3]);
+                                const modelName = model[2].replace(/'/g, "\\'"); // 转义单引号
+                                const displayModelName = truncateText(model[2], 30);  // 模型名称保持较长的显示
+                                const displayDesc = truncateText(model[3], 20);  // 描述使用较短的显示
                                 
                                 return `
                                     <tr>
                                         <td>${modelCounter++}</td>
                                         <td>${provider[1]}</td>
-                                        <td title="${model[2]}">${displayModelName}</td>
+                                        <td title="${modelName}" class="copyable" onclick="copyToClipboard('${modelName}', this)">
+                                            ${displayModelName}
+                                        </td>
                                         <td title="${model[3] || ''}">${displayDesc}</td>
                                         <td>
                                             <button class="action-button edit-button" onclick="editModel(${model[0]})">
@@ -2672,8 +2726,8 @@
                     <tr>
                         <td>${model[0]}</td>
                         <td>${providerMap.get(model[1]) || model[1]}</td>
-                        <td>${model[2]}</td>
-                        <td>${model[3] || ''}</td>
+                        <td title="${model[2]}" class="copyable" onclick="copyToClipboard('${model[2]}', this)">${truncateText(model[2], 20)}</td>
+                        <td title="${model[3] || ''}">${truncateText(model[3], 15)}</td>
                         <td>
                             <button class="action-button edit-button" onclick="editModel(${model[0]})">
                                 <i class="fas fa-edit"></i>
@@ -3071,11 +3125,45 @@
         document.addEventListener('DOMContentLoaded', initialize);
 
         // 添加一个通用的文本截断函数
-        function truncateText(text, maxLength = 30) {
+        function truncateText(text, maxLength = 30) {  // 将默认长度改为15个字符
             if (!text) return '';
-            return text.length > maxLength ? 
-                text.substring(0, maxLength - 3) + '...' : 
-                text;
+            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        }
+
+        // 增强版复制函数
+        async function copyToClipboard(text, element) {
+            try {
+                if (!text) {
+                    showResponse('没有内容可复制', false);
+                    return;
+                }
+                
+                // 处理浏览器兼容性
+                if (!navigator.clipboard) {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                } else {
+                    await navigator.clipboard.writeText(text);
+                }
+                
+                // 添加视觉反馈
+                element.classList.add('copied-feedback');
+                const originalText = element.textContent;
+                element.textContent = '✓ 已复制';
+                
+                setTimeout(() => {
+                    element.textContent = originalText;
+                    element.classList.remove('copied-feedback');
+                }, 1500);
+                
+            } catch (err) {
+                console.error('复制失败:', err);
+                showResponse(`复制失败: ${err.message}`, false);
+            }
         }
     </script>
 </body>
