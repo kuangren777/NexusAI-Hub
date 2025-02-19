@@ -27,6 +27,8 @@ def save_message_to_file(data: dict):
         if file_path.exists():
             with open(file_path, 'r', encoding='utf-8') as f:
                 existing_data = json.load(f)
+                if not isinstance(existing_data, list):
+                    existing_data = [existing_data]
             existing_data.append(data)
         else:
             existing_data = [data]

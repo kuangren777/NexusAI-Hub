@@ -3165,6 +3165,83 @@
                 showResponse(`复制失败: ${err.message}`, false);
             }
         }
+
+        // 修改表单提交处理逻辑
+        let isSubmitting = false; // 添加提交状态锁
+
+        async function handleAddModelSubmit(e) {
+            e.preventDefault();
+            if (isSubmitting) return;
+            
+            const form = e.target;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const providerIdInput = form.querySelector('#modelProviderId');
+            const modelNameInput = form.querySelector('#modelName');
+            const descriptionInput = form.querySelector('#modelDescription');
+
+            // 添加空值检查
+            if (!providerIdInput || !modelNameInput || !descriptionInput) {
+                showResponse("表单元素未正确加载，请刷新页面重试", false);
+                return;
+            }
+
+            isSubmitting = true;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提交中...';
+
+            try {
+                const response = await fetch("/provider_models", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        provider_id: parseInt(providerIdInput.value),
+                        model_name: modelNameInput.value.trim(),
+                        description: descriptionInput.value.trim()
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showResponse("模型添加成功", true);
+                    closeModal('addModelModal');
+                    await refreshDatabaseContent();
+                } else {
+                    throw new Error(result.detail || "添加失败");
+                }
+            } catch (error) {
+                showResponse(`添加失败: ${error.message}`, false);
+            } finally {
+                isSubmitting = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '添加模型';
+            }
+        }
+
+        // 修改模态框显示逻辑
+        function showAddModelModal() {
+            const modal = document.getElementById('addModelModal');
+            const form = modal.querySelector('form');
+            
+            // 先移除旧的事件监听器
+            form.removeEventListener('submit', handleAddModelSubmit);
+            // 添加新的事件监听器
+            form.addEventListener('submit', handleAddModelSubmit);
+            
+            // 加载提供商列表
+            fetch('/providers')
+                .then(response => response.json())
+                .then(data => {
+                    const select = form.querySelector('#modelProviderId');
+                    select.innerHTML = data.providers.map(provider => 
+                        `<option value="${provider[0]}">${provider[1]}</option>`
+                    ).join('');
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    showResponse('加载提供商列表失败: ' + error.message, false);
+                    closeModal('addModelModal');
+                });
+        }
     </script>
 </body>
 </html>
