@@ -712,25 +712,32 @@ Token使用统计 [会话ID: {conversation_id}]
                         if not line:
                             continue
                         
+                        # 新增：过滤非数据行和心跳信号
+                        if line.startswith(':'):  # 过滤以冒号开头的SSE注释行
+                            if DEBUG_MODE:
+                                logger.info(f"跳过心跳/注释行: {line}")
+                            continue
+                        
                         # 处理特殊结束标记
                         if line == "[DONE]":
                             if DEBUG_MODE:
                                 logger.info("接收到流式结束标记 [DONE]")
-                            continue  # 跳过特殊标记
+                            continue
                         
                         try:
-                            # 移除可能的前缀
+                            # 改进数据提取逻辑
                             if line.startswith('data: '):
-                                line = line[6:].strip()
+                                data_str = line[6:].strip()
+                            else:
+                                data_str = line  # 尝试解析整行作为数据
                             
-                            # 跳过空数据和特殊标记
-                            if not line or line in ('[DONE]', 'data: [DONE]'):
+                            if not data_str:
                                 continue
                             
                             if DEBUG_MODE == "Detail":
-                                logger.info(f"尝试解析的行内容: {line}")
+                                logger.info(f"尝试解析的数据内容: {data_str}")
                             
-                            data = json.loads(line)
+                            data = json.loads(data_str)
                             
                             if "choices" in data and data["choices"]:
                                 delta = data["choices"][0].get("delta", {})
