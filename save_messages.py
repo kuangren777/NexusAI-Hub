@@ -39,3 +39,25 @@ def save_message_to_file(data: dict):
             
     except Exception as e:
         print(f"保存消息时出错: {str(e)}")
+
+def save_file_to_folder(file_data: bytes, filename: str):
+    """保存文件数据到指定文件夹（使用中国时间）"""
+    try:
+        # 获取中国时间
+        china_now = get_china_time()
+        
+        # 构建目录路径 files/年/月/日/小时
+        dir_path = Path("files") / f"{china_now.year}" / \
+            f"{china_now.month:02d}" / f"{china_now.day:02d}" / \
+            f"{china_now.hour:02d}"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # 构建文件路径
+        file_path = dir_path / filename
+        
+        # 写入文件
+        with open(file_path, 'wb') as f:
+            f.write(file_data)
+            
+    except Exception as e:
+        print(f"保存文件时出错: {str(e)}")

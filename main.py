@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 import re
 import traceback
 from my_tokenizer import Tokenizer
-from save_messages import save_message_to_file
+from save_messages import save_message_to_file, save_file_to_folder
 from warnings import filterwarnings
 
 filterwarnings("ignore", category=DeprecationWarning)
@@ -462,10 +462,30 @@ async def handle_chat_completions(request: Request):
         body = await request.json()
         messages = body.get("messages", [])
         
+        # 确保 messages 是字符串而不是列表
+        if isinstance(messages, list):
+            for msg in messages:
+                if isinstance(msg, dict):
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        messages.append(content)
+                    # 处理文件数据（如图片）
+                    elif "file" in msg:  # 假设文件数据在字典中以 "file" 键存储
+                        file_data = msg["file"]  # 获取文件数据
+                        filename = msg.get("filename", "uploaded_file")  # 获取文件名
+                        save_file_to_folder(file_data, filename)  # 保存文件数据
+                elif isinstance(msg, str):
+                    messages.append(msg)
+
+        else:
+            messages = [str(messages)]  # 如果不是列表，转换为列表
+
+        prompt_text = "\n".join(messages)  # 确保 prompt_text 是字符串
+        
         # 尝试从最后一条用户消息中找到相关会话
         conversation_id = None
         if messages:
-            last_message = messages[-1].get("content", "")
+            last_message = messages[-1]
             last_conversation = await stats_tracker.get_last_conversation(last_message)
             if last_conversation:
                 conversation_id = last_conversation["conversation_id"]
@@ -522,7 +542,6 @@ async def handle_chat_completions(request: Request):
             raise HTTPException(status_code=400, detail="不支持的模型")
         
         # 计算并记录发送的prompt tokens
-        prompt_text = "\n".join([msg.get("content", "") for msg in messages])
         prompt_tokens = await tokenizer.count_tokens(prompt_text)
         
         logger.info(f"""
@@ -630,15 +649,32 @@ Token使用统计 [会话ID: {conversation_id}]
             if response.status_code != 200:
                 if DEBUG_MODE:
                     logger.error(f"上游服务器错误: {response.status_code}")
-                raise HTTPException(
+                # 获取响应头
+                headers = dict(response.headers)
+                # 解析响应内容
+                try:
+                    error_content = response.json()
+                except:
+                    error_content = response.text
+
+                # 直接返回响应，保留状态码和响应头
+                return Response(
+                    content=json.dumps(error_content),
                     status_code=response.status_code,
-                    detail=response.text
+                    headers={
+                        # 转发关键的速率限制响应头
+                        "X-RateLimit-Limit": headers.get("X-RateLimit-Limit", ""),
+                        "X-RateLimit-Remaining": headers.get("X-RateLimit-Remaining", ""),
+                        "X-RateLimit-Reset": headers.get("X-RateLimit-Reset", ""),
+                        "Content-Type": "application/json"
+                    }
                 )
             
             if DEBUG_MODE:
                 logger.info(f"非流式响应内容: {response.text}")
             
             # 在成功接收响应后
+            completion_text = ""  # 初始化变量
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data.get("choices") and len(response_data["choices"]) > 0:
@@ -665,14 +701,14 @@ Token使用统计 [会话ID: {conversation_id}]
                         message=completion_text
                     )
 
-                # 更新保存的完成内容
-                if completion_text:
-                    save_message_to_file({
-                        "timestamp": datetime.now().isoformat(),
-                        "conversation_content": {
-                            "completion": completion_text
-                        }
-                    })
+            # 更新保存的完成内容
+            if completion_text:  # 现在这里不会报错了
+                save_message_to_file({
+                    "timestamp": datetime.now().isoformat(),
+                    "conversation_content": {
+                        "completion": completion_text
+                    }
+                })
             
             return Response(
                 content=response.text,
@@ -714,13 +750,13 @@ Token使用统计 [会话ID: {conversation_id}]
                         
                         # 新增：过滤非数据行和心跳信号
                         if line.startswith(':'):  # 过滤以冒号开头的SSE注释行
-                            if DEBUG_MODE:
+                            if DEBUG_MODE == "Detail":
                                 logger.info(f"跳过心跳/注释行: {line}")
                             continue
                         
                         # 处理特殊结束标记
                         if line == "[DONE]":
-                            if DEBUG_MODE:
+                            if DEBUG_MODE == "Detail":
                                 logger.info("接收到流式结束标记 [DONE]")
                             continue
                         
