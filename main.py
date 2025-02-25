@@ -23,6 +23,7 @@ import traceback
 from my_tokenizer import Tokenizer
 from save_messages import save_message_to_file
 from warnings import filterwarnings
+import time
 
 filterwarnings("ignore", category=DeprecationWarning)
 
@@ -616,24 +617,30 @@ Token使用统计 [会话ID: {conversation_id}]
                     if attempt > 0 and DEBUG_MODE:
                         logger.info(f"第 {attempt + 1} 次重试请求")
                     
+                    # 增加超时时间，特别是对于Grok模型
+                    timeout = 300.0 if is_grok_model else 120.0
+                    
+                    if DEBUG_MODE:
+                        logger.info(f"设置请求超时时间: {timeout}秒")
+                    
                     response = await client.post(
                         upstream_url,
                         json=body,
                         headers=headers,
-                        timeout=2000.0  # 增加到5分钟
+                        timeout=timeout
                     )
                     break  # 如果请求成功，跳出重试循环
                     
-                except httpx.ReadTimeout:
+                except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
                     if DEBUG_MODE:
-                        logger.error(f"请求超时（第 {attempt + 1} 次尝试）：上游服务器响应时间过长")
+                        logger.error(f"请求超时（第 {attempt + 1} 次尝试）：{type(e).__name__}: {str(e)}")
                     if attempt == retry_count - 1:  # 最后一次尝试
                         raise HTTPException(
                             status_code=504,
                             detail={
                                 "error": "请求超时",
                                 "type": "timeout_error",
-                                "message": "上游服务器响应时间过长，请稍后重试",
+                                "message": f"上游服务器响应时间过长或连接超时 ({type(e).__name__})",
                                 "attempts": retry_count
                             }
                         )
@@ -684,34 +691,98 @@ Token使用统计 [会话ID: {conversation_id}]
             # 在成功接收响应后
             completion_text = ""  # 初始化变量
             if response.status_code == 200:
-                response_data = response.json()
-                
-                # 处理Grok模型的特殊返回格式
-                if is_grok_model:
-                    if DEBUG_MODE:
-                        logger.info("处理Grok模型的响应格式")
+                try:
+                    response_data = response.json()
                     
-                    # 转换Grok格式为OpenAI标准格式
-                    if "choices" in response_data and len(response_data["choices"]) > 0:
-                        if "message" in response_data["choices"][0]:
-                            # 获取内容
-                            completion_text = response_data["choices"][0]["message"].get("content", "")
+                    # 记录原始响应数据，用于调试
+                    if DEBUG_MODE:
+                        logger.info(f"原始响应数据结构: {json.dumps(response_data, ensure_ascii=False)}")
+                    
+                    # 处理Grok模型的特殊返回格式
+                    if is_grok_model:
+                        if DEBUG_MODE:
+                            logger.info("处理Grok模型的响应格式")
+                        
+                        # 转换Grok格式为OpenAI标准格式
+                        if "choices" in response_data and len(response_data["choices"]) > 0:
+                            choice = response_data["choices"][0]
                             
-                            # 转换为OpenAI格式
-                            response_data["choices"][0]["message"] = {
-                                "role": "assistant",
-                                "content": completion_text
-                            }
+                            # 检查是否有message字段
+                            if "message" in choice:
+                                if isinstance(choice["message"], dict):
+                                    # 标准格式：message是一个字典
+                                    completion_text = choice["message"].get("content", "")
+                                    
+                                    # 确保message有正确的role字段
+                                    if "role" not in choice["message"]:
+                                        choice["message"]["role"] = "assistant"
+                                elif isinstance(choice["message"], str):
+                                    # 非标准格式：message是一个字符串
+                                    completion_text = choice["message"]
+                                    # 转换为标准格式
+                                    choice["message"] = {
+                                        "role": "assistant",
+                                        "content": completion_text
+                                    }
+                            # 如果没有message字段但有text字段（某些API的变体）
+                            elif "text" in choice:
+                                completion_text = choice["text"]
+                                # 添加标准格式的message字段
+                                choice["message"] = {
+                                    "role": "assistant",
+                                    "content": completion_text
+                                }
+                            # 如果没有message字段但有content字段（另一种变体）
+                            elif "content" in choice:
+                                completion_text = choice["content"]
+                                # 添加标准格式的message字段
+                                choice["message"] = {
+                                    "role": "assistant",
+                                    "content": completion_text
+                                }
                             
                             # 重新序列化为JSON
                             response_text = json.dumps(response_data)
                         else:
                             if DEBUG_MODE:
-                                logger.warning("Grok响应中未找到message字段")
-                else:
-                    # 标准OpenAI格式处理
-                    if response_data.get("choices") and len(response_data["choices"]) > 0:
-                        completion_text = response_data["choices"][0].get("message", {}).get("content", "")
+                                logger.warning("Grok响应中未找到有效的choices字段")
+                            # 尝试从其他可能的字段中提取内容
+                            if "response" in response_data:
+                                completion_text = response_data["response"]
+                                # 构造一个符合OpenAI格式的响应
+                                new_response = {
+                                    "id": response_data.get("id", f"grok-{uuid.uuid4()}"),
+                                    "object": "chat.completion",
+                                    "created": int(datetime.now().timestamp()),
+                                    "model": model_name,
+                                    "choices": [{
+                                        "index": 0,
+                                        "message": {
+                                            "role": "assistant",
+                                            "content": completion_text
+                                        },
+                                        "finish_reason": "stop"
+                                    }]
+                                }
+                                response_text = json.dumps(new_response)
+                    else:
+                        # 标准OpenAI格式处理
+                        if response_data.get("choices") and len(response_data["choices"]) > 0:
+                            completion_text = response_data["choices"][0].get("message", {}).get("content", "")
+                        response_text = response.text
+                    
+                    if not completion_text and DEBUG_MODE:
+                        logger.warning(f"无法从响应中提取完成文本，原始响应: {response.text}")
+                
+                except json.JSONDecodeError as e:
+                    if DEBUG_MODE:
+                        logger.error(f"JSON解析错误: {str(e)}, 响应内容: {response.text}")
+                    # 如果无法解析JSON，返回原始响应
+                    response_text = response.text
+                except Exception as e:
+                    if DEBUG_MODE:
+                        logger.error(f"处理响应时发生错误: {str(e)}")
+                    # 发生其他错误时，返回原始响应
                     response_text = response.text
                 
                 if completion_text:
@@ -757,12 +828,18 @@ Token使用统计 [会话ID: {conversation_id}]
         async def stream_generator():
             current_content = ""
             try:
+                # 增加超时时间，特别是对于Grok模型
+                timeout = 300.0 if is_grok_model else 60.0
+                
+                if DEBUG_MODE:
+                    logger.info(f"设置流式请求超时时间: {timeout}秒")
+                
                 async with client.stream(
                     'POST',
                     upstream_url,
                     json={**body, "stream": True},
                     headers=headers,
-                    timeout=60.0
+                    timeout=timeout
                 ) as response:
                     if response.status_code != 200:
                         error_response = await response.aread()
@@ -784,7 +861,7 @@ Token使用统计 [会话ID: {conversation_id}]
                         if not line:
                             continue
                         
-                        # 新增：过滤非数据行和心跳信号
+                        # 过滤非数据行和心跳信号
                         if line.startswith(':'):  # 过滤以冒号开头的SSE注释行
                             if DEBUG_MODE == "Detail":
                                 logger.info(f"跳过心跳/注释行: {line}")
@@ -794,6 +871,7 @@ Token使用统计 [会话ID: {conversation_id}]
                         if "[DONE]" in line:
                             if DEBUG_MODE == "Detail":
                                 logger.info("接收到流式结束标记 [DONE]")
+                            yield "data: [DONE]\n\n".encode('utf-8')
                             continue
                         
                         try:
@@ -803,7 +881,7 @@ Token使用统计 [会话ID: {conversation_id}]
                             else:
                                 data_str = line  # 尝试解析整行作为数据
                             
-                            if not data_str:
+                            if not data_str or data_str == "[DONE]":
                                 continue
                             
                             if DEBUG_MODE == "Detail":
@@ -812,30 +890,94 @@ Token使用统计 [会话ID: {conversation_id}]
                             data = json.loads(data_str)
                             
                             # 处理Grok模型的流式响应
-                            if is_grok_model and "choices" in data and data["choices"]:
-                                if "message" in data["choices"][0]:
-                                    # 获取内容
-                                    content = data["choices"][0]["message"].get("content", "")
-                                    # 转换为OpenAI格式的delta
-                                    data["choices"][0]["delta"] = {
-                                        "role": "assistant",
+                            if is_grok_model:
+                                if DEBUG_MODE:
+                                    logger.info(f"处理Grok流式响应: {json.dumps(data, ensure_ascii=False)}")
+                                
+                                # 确保数据有正确的结构
+                                if "choices" not in data:
+                                    data["choices"] = [{"index": 0}]
+                                elif not data["choices"]:
+                                    data["choices"] = [{"index": 0}]
+                                
+                                choice = data["choices"][0]
+                                content = ""
+                                
+                                # 检查各种可能的字段格式
+                                if "delta" in choice:
+                                    # 已经是delta格式，检查内容
+                                    if isinstance(choice["delta"], dict):
+                                        if "content" in choice["delta"]:
+                                            content = choice["delta"]["content"]
+                                        # 确保有role字段
+                                        if "role" not in choice["delta"]:
+                                            choice["delta"]["role"] = "assistant"
+                                    elif isinstance(choice["delta"], str):
+                                        content = choice["delta"]
+                                        choice["delta"] = {
+                                            "role": "assistant",
+                                            "content": content
+                                        }
+                                elif "message" in choice:
+                                    # 需要转换message为delta
+                                    if isinstance(choice["message"], dict):
+                                        content = choice["message"].get("content", "")
+                                        role = choice["message"].get("role", "assistant")
+                                    else:
+                                        content = str(choice["message"])
+                                        role = "assistant"
+                                    
+                                    # 创建标准delta格式
+                                    choice["delta"] = {
+                                        "role": role,
                                         "content": content
                                     }
                                     # 删除原始message字段
-                                    del data["choices"][0]["message"]
-                                    
+                                    del choice["message"]
+                                elif "text" in choice:
+                                    content = choice["text"]
+                                    choice["delta"] = {
+                                        "role": "assistant",
+                                        "content": content
+                                    }
+                                    del choice["text"]
+                                elif "content" in choice:
+                                    content = choice["content"]
+                                    choice["delta"] = {
+                                        "role": "assistant",
+                                        "content": content
+                                    }
+                                    del choice["content"]
+                                else:
+                                    # 找不到任何内容字段，创建空delta
+                                    choice["delta"] = {
+                                        "role": "assistant",
+                                        "content": ""
+                                    }
+                                
+                                # 确保其他必要字段存在
+                                if "index" not in choice:
+                                    choice["index"] = 0
+                                
+                                # 确保基本字段存在
+                                if "id" not in data:
+                                    data["id"] = f"chatcmpl-{uuid.uuid4()}"
+                                if "object" not in data:
+                                    data["object"] = "chat.completion.chunk"
+                                if "created" not in data:
+                                    data["created"] = int(time.time())
+                                if "model" not in data:
+                                    data["model"] = model_name
+                                
+                                if content:
                                     current_content += content
-                                    if DEBUG_MODE == "Detail":
-                                        logger.info(f"转换后的Grok流式响应: {json.dumps(data)}")
-                                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
-                            elif "choices" in data and data["choices"]:
-                                delta = data["choices"][0].get("delta", {})
-                                if "content" in delta:
-                                    content = delta["content"]
-                                    current_content += content
-                                    if DEBUG_MODE == "Detail":
-                                        logger.info(f"流式响应内容: {content}")
-                                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                                
+                                if DEBUG_MODE == "detail":
+                                    logger.info(f"转换后的Grok流式响应: {json.dumps(data, ensure_ascii=False)}")
+                            
+                            # 发送处理后的数据
+                            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                            
                         except json.JSONDecodeError as e:
                             if DEBUG_MODE:
                                 logger.warning(f"跳过无法解析的数据: {line} | 错误: {str(e)}")
@@ -844,6 +986,9 @@ Token使用统计 [会话ID: {conversation_id}]
                             if DEBUG_MODE:
                                 logger.error(f"处理数据时发生意外错误: {str(e)}")
                             continue
+                    
+                    # 确保发送结束标记
+                    yield "data: [DONE]\n\n".encode('utf-8')
                     
                     # 在流式响应结束后保存完整内容
                     if current_content:
@@ -867,6 +1012,18 @@ Token使用统计 [会话ID: {conversation_id}]
                             }
                         })
 
+            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                error_msg = {
+                    "error": {
+                        "message": f"请求超时: {str(e)}",
+                        "type": "timeout_error",
+                        "code": 504
+                    }
+                }
+                if DEBUG_MODE:
+                    logger.error(f"流式请求超时: {type(e).__name__}: {str(e)}")
+                yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
+                yield "data: [DONE]\n\n".encode('utf-8')
             except Exception as e:
                 logger.error(f"""
 错误统计 [会话ID: {conversation_id}]
@@ -877,7 +1034,15 @@ Token使用统计 [会话ID: {conversation_id}]
 - 提供商ID: {provider_id}
 ------------------------
 """)
-                # ... 错误处理代码 ...
+                error_msg = {
+                    "error": {
+                        "message": f"处理流式响应时发生错误: {str(e)}",
+                        "type": "stream_error",
+                        "code": 500
+                    }
+                }
+                yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
+                yield "data: [DONE]\n\n".encode('utf-8')
             
             finally:
                 await client.aclose()
