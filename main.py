@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 import re
 import traceback
 from my_tokenizer import Tokenizer
-from save_messages import save_message_to_file, save_file_to_folder
+from save_messages import save_message_to_file
 from warnings import filterwarnings
 
 filterwarnings("ignore", category=DeprecationWarning)
@@ -464,18 +464,21 @@ async def handle_chat_completions(request: Request):
         
         # 确保 messages 是字符串而不是列表
         if isinstance(messages, list):
+            # 提取内容，确保每个元素都是字符串
+            messages = []
             for msg in messages:
                 if isinstance(msg, dict):
+                    # 如果是字典，提取内容
                     content = msg.get("content", "")
                     if isinstance(content, str):
                         messages.append(content)
-                    # 处理文件数据（如图片）
-                    elif "file" in msg:  # 假设文件数据在字典中以 "file" 键存储
-                        file_data = msg["file"]  # 获取文件数据
-                        filename = msg.get("filename", "uploaded_file")  # 获取文件名
-                        save_file_to_folder(file_data, filename)  # 保存文件数据
                 elif isinstance(msg, str):
                     messages.append(msg)
+                # 处理文件数据（如图片）
+                elif isinstance(msg, list):
+                    # 这里可以根据需要处理文件数据
+                    # 例如，记录文件信息或将其转换为字符串
+                    messages.append("包含文件数据")  # 你可以自定义处理逻辑
 
         else:
             messages = [str(messages)]  # 如果不是列表，转换为列表
@@ -521,6 +524,11 @@ async def handle_chat_completions(request: Request):
             if DEBUG_MODE:
                 logger.error("缺少model参数")
             raise HTTPException(status_code=400, detail="缺少model参数")
+        
+        # 检查是否为Grok模型
+        is_grok_model = "grok" in model_name.lower()
+        if DEBUG_MODE and is_grok_model:
+            logger.info(f"检测到Grok模型: {model_name}")
         
         # 验证个性化密钥
         provider_id = await verify_personalized_key(personalized_key, model_name)
@@ -677,8 +685,36 @@ Token使用统计 [会话ID: {conversation_id}]
             completion_text = ""  # 初始化变量
             if response.status_code == 200:
                 response_data = response.json()
-                if response_data.get("choices") and len(response_data["choices"]) > 0:
-                    completion_text = response_data["choices"][0].get("message", {}).get("content", "")
+                
+                # 处理Grok模型的特殊返回格式
+                if is_grok_model:
+                    if DEBUG_MODE:
+                        logger.info("处理Grok模型的响应格式")
+                    
+                    # 转换Grok格式为OpenAI标准格式
+                    if "choices" in response_data and len(response_data["choices"]) > 0:
+                        if "message" in response_data["choices"][0]:
+                            # 获取内容
+                            completion_text = response_data["choices"][0]["message"].get("content", "")
+                            
+                            # 转换为OpenAI格式
+                            response_data["choices"][0]["message"] = {
+                                "role": "assistant",
+                                "content": completion_text
+                            }
+                            
+                            # 重新序列化为JSON
+                            response_text = json.dumps(response_data)
+                        else:
+                            if DEBUG_MODE:
+                                logger.warning("Grok响应中未找到message字段")
+                else:
+                    # 标准OpenAI格式处理
+                    if response_data.get("choices") and len(response_data["choices"]) > 0:
+                        completion_text = response_data["choices"][0].get("message", {}).get("content", "")
+                    response_text = response.text
+                
+                if completion_text:
                     completion_tokens = await tokenizer.count_tokens(completion_text)
                     
                     logger.info(f"""
@@ -702,7 +738,7 @@ Token使用统计 [会话ID: {conversation_id}]
                     )
 
             # 更新保存的完成内容
-            if completion_text:  # 现在这里不会报错了
+            if completion_text:
                 save_message_to_file({
                     "timestamp": datetime.now().isoformat(),
                     "conversation_content": {
@@ -711,7 +747,7 @@ Token使用统计 [会话ID: {conversation_id}]
                 })
             
             return Response(
-                content=response.text,
+                content=response_text if 'response_text' in locals() else response.text,
                 media_type="application/json"
             )
         
@@ -755,7 +791,7 @@ Token使用统计 [会话ID: {conversation_id}]
                             continue
                         
                         # 处理特殊结束标记
-                        if line == "[DONE]":
+                        if "[DONE]" in line:
                             if DEBUG_MODE == "Detail":
                                 logger.info("接收到流式结束标记 [DONE]")
                             continue
@@ -775,7 +811,24 @@ Token使用统计 [会话ID: {conversation_id}]
                             
                             data = json.loads(data_str)
                             
-                            if "choices" in data and data["choices"]:
+                            # 处理Grok模型的流式响应
+                            if is_grok_model and "choices" in data and data["choices"]:
+                                if "message" in data["choices"][0]:
+                                    # 获取内容
+                                    content = data["choices"][0]["message"].get("content", "")
+                                    # 转换为OpenAI格式的delta
+                                    data["choices"][0]["delta"] = {
+                                        "role": "assistant",
+                                        "content": content
+                                    }
+                                    # 删除原始message字段
+                                    del data["choices"][0]["message"]
+                                    
+                                    current_content += content
+                                    if DEBUG_MODE == "Detail":
+                                        logger.info(f"转换后的Grok流式响应: {json.dumps(data)}")
+                                    yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode('utf-8')
+                            elif "choices" in data and data["choices"]:
                                 delta = data["choices"][0].get("delta", {})
                                 if "content" in delta:
                                     content = delta["content"]
@@ -794,7 +847,6 @@ Token使用统计 [会话ID: {conversation_id}]
                     
                     # 在流式响应结束后保存完整内容
                     if current_content:
-
                         completion_tokens = await tokenizer.count_tokens(current_content)
                         
                         logger.info(f"""
