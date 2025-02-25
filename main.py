@@ -24,6 +24,8 @@ from my_tokenizer import Tokenizer
 from save_messages import save_message_to_file
 from warnings import filterwarnings
 import time
+import random  # 添加随机模块导入
+from httpx import AsyncClient, AsyncHTTPTransport  # 修改为异步传输类
 
 filterwarnings("ignore", category=DeprecationWarning)
 
@@ -105,6 +107,12 @@ logger = setup_logger('nexusai', log_file)
 
 # 调试模式配置
 DEBUG_MODE = True  # 可以通过环境变量或配置文件设置
+
+# 修改代理配置为URL字符串格式
+PROXIES = [
+    'http://192.168.88.205:8888',
+    'http://192.168.88.249:7890'
+]
 
 # API 路由
 @app_admin.post("/providers")
@@ -584,7 +592,11 @@ Token使用统计 [会话ID: {conversation_id}]
             }
         })
 
-        client = httpx.AsyncClient()
+        # 随机选择代理（仅限Grok模型）
+        proxy = random.choice(PROXIES) if is_grok_model else None
+        
+        # 创建带代理的客户端（仅限Grok模型）
+        client = AsyncClient(transport=AsyncHTTPTransport(proxy=proxy)) if is_grok_model else AsyncClient()
         
         # 简化URL构建逻辑
         base_url = provider_info['server_url'].rstrip('/')
@@ -609,11 +621,19 @@ Token使用统计 [会话ID: {conversation_id}]
         if not is_stream:
             if DEBUG_MODE:
                 logger.info("使用非流式响应")
-            retry_count = 3  # 最大重试次数
-            retry_delay = 5  # 重试间隔（秒）
+            retry_count = 3
+            retry_delay = 5
             
             for attempt in range(retry_count):
                 try:
+                    # 创建带代理的异步transport（仅限Grok模型）
+                    if is_grok_model:
+                        proxy_url = random.choice(PROXIES)
+                        transport = AsyncHTTPTransport(proxy=proxy_url)
+                        client = AsyncClient(transport=transport)
+                    else:
+                        client = AsyncClient()
+
                     if attempt > 0 and DEBUG_MODE:
                         logger.info(f"第 {attempt + 1} 次重试请求")
                     
@@ -695,12 +715,12 @@ Token使用统计 [会话ID: {conversation_id}]
                     response_data = response.json()
                     
                     # 记录原始响应数据，用于调试
-                    if DEBUG_MODE:
+                    if DEBUG_MODE == "detail":
                         logger.info(f"原始响应数据结构: {json.dumps(response_data, ensure_ascii=False)}")
                     
                     # 处理Grok模型的特殊返回格式
                     if is_grok_model:
-                        if DEBUG_MODE:
+                        if DEBUG_MODE == "detail":
                             logger.info("处理Grok模型的响应格式")
                         
                         # 转换Grok格式为OpenAI标准格式
@@ -828,10 +848,18 @@ Token使用统计 [会话ID: {conversation_id}]
         async def stream_generator():
             current_content = ""
             try:
+                # 创建带代理的异步transport（仅限Grok模型）
+                if is_grok_model:
+                    proxy_url = random.choice(PROXIES)
+                    transport = AsyncHTTPTransport(proxy=proxy_url)
+                    client = AsyncClient(transport=transport)
+                else:
+                    client = AsyncClient()
+
                 # 增加超时时间，特别是对于Grok模型
                 timeout = 300.0 if is_grok_model else 60.0
                 
-                if DEBUG_MODE:
+                if DEBUG_MODE == "detail":
                     logger.info(f"设置流式请求超时时间: {timeout}秒")
                 
                 async with client.stream(
