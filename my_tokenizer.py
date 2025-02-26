@@ -43,6 +43,8 @@ class Tokenizer:
                 if response.status_code == 200:
                     result = response.json()
                     if result.get("data") and len(result["data"]) > 0:
+                        # self.logger.info(f"请求的文本: {text}")
+                        # self.logger.info(f"API 响应: {response.text}")
                         return result["data"][0]["total_tokens"]
                     
                 self.logger.error(f"Token计算API返回错误: {response.text}")

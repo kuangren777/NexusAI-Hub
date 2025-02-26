@@ -470,29 +470,35 @@ async def handle_chat_completions(request: Request):
     try:
         body = await request.json()
         messages = body.get("messages", [])
+        count_text = ""
         
         # 确保 messages 是字符串而不是列表
         if isinstance(messages, list):
             # 提取内容，确保每个元素都是字符串
-            messages = []
+            # messages = []
             for msg in messages:
                 if isinstance(msg, dict):
                     # 如果是字典，提取内容
                     content = msg.get("content", "")
-                    if isinstance(content, str):
-                        messages.append(content)
+                    if isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict):
+                                if item.get("type") == "text":
+                                    count_text += item.get("text", "")
+                    elif isinstance(content, str):
+                        count_text += content
                 elif isinstance(msg, str):
-                    messages.append(msg)
+                    count_text += msg
                 # 处理文件数据（如图片）
                 elif isinstance(msg, list):
                     # 这里可以根据需要处理文件数据
                     # 例如，记录文件信息或将其转换为字符串
-                    messages.append("包含文件数据")  # 你可以自定义处理逻辑
+                    count_text += "包含文件数据"  # 你可以自定义处理逻辑
 
         else:
-            messages = [str(messages)]  # 如果不是列表，转换为列表
+            count_text = str(messages)  # 如果不是列表，转换为列表
 
-        prompt_text = "\n".join(messages)  # 确保 prompt_text 是字符串
+        prompt_text = count_text  # 确保 prompt_text 是字符串
         
         # 尝试从最后一条用户消息中找到相关会话
         conversation_id = None
@@ -618,12 +624,13 @@ Token使用统计 [会话ID: {conversation_id}]
             "Content-Type": "application/json"
         }
 
+        # 增加重试次数和延迟
+        retry_count = 3
+        retry_delay = 5
+
         if not is_stream:
             if DEBUG_MODE:
                 logger.info("使用非流式响应")
-            retry_count = 3
-            retry_delay = 5
-            
             for attempt in range(retry_count):
                 try:
                     # 创建带代理的异步transport（仅限Grok模型）
@@ -652,8 +659,6 @@ Token使用统计 [会话ID: {conversation_id}]
                     break  # 如果请求成功，跳出重试循环
                     
                 except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
-                    if DEBUG_MODE:
-                        logger.error(f"请求超时（第 {attempt + 1} 次尝试）：{type(e).__name__}: {str(e)}")
                     if attempt == retry_count - 1:  # 最后一次尝试
                         raise HTTPException(
                             status_code=504,
@@ -667,16 +672,17 @@ Token使用统计 [会话ID: {conversation_id}]
                     await asyncio.sleep(retry_delay)  # 等待一段时间后重试
                     
                 except httpx.RequestError as e:
-                    if DEBUG_MODE:
-                        logger.error(f"请求错误: {str(e)}")
-                    raise HTTPException(
-                        status_code=502,
-                        detail={
-                            "error": str(e),
-                            "type": "request_error",
-                            "message": "与上游服务器通信时发生错误"
-                        }
-                    )
+                    logger.error(f"请求错误 [尝试次数: {attempt + 1}/{retry_count}] - 错误信息: {str(e)}")
+                    if attempt == retry_count - 1:  # 最后一次尝试
+                        raise HTTPException(
+                            status_code=502,
+                            detail={
+                                "error": str(e),
+                                "type": "request_error",
+                                "message": "与上游服务器通信时发生错误"
+                            }
+                        )
+                    await asyncio.sleep(retry_delay)  # 等待一段时间后重试
                 finally:
                     if attempt == retry_count - 1:  # 最后一次尝试后关闭客户端
                         await client.aclose()
@@ -715,12 +721,12 @@ Token使用统计 [会话ID: {conversation_id}]
                     response_data = response.json()
                     
                     # 记录原始响应数据，用于调试
-                    if DEBUG_MODE == "detail":
+                    if DEBUG_MODE == "Detail":
                         logger.info(f"原始响应数据结构: {json.dumps(response_data, ensure_ascii=False)}")
                     
                     # 处理Grok模型的特殊返回格式
                     if is_grok_model:
-                        if DEBUG_MODE == "detail":
+                        if DEBUG_MODE == "Detail":
                             logger.info("处理Grok模型的响应格式")
                         
                         # 转换Grok格式为OpenAI标准格式
@@ -859,7 +865,7 @@ Token使用统计 [会话ID: {conversation_id}]
                 # 增加超时时间，特别是对于Grok模型
                 timeout = 300.0 if is_grok_model else 60.0
                 
-                if DEBUG_MODE == "detail":
+                if DEBUG_MODE == "Detail":
                     logger.info(f"设置流式请求超时时间: {timeout}秒")
                 
                 async with client.stream(
@@ -919,7 +925,7 @@ Token使用统计 [会话ID: {conversation_id}]
                             
                             # 处理Grok模型的流式响应
                             if is_grok_model:
-                                if DEBUG_MODE:
+                                if DEBUG_MODE == "Detail":
                                     logger.info(f"处理Grok流式响应: {json.dumps(data, ensure_ascii=False)}")
                                 
                                 # 确保数据有正确的结构
@@ -1000,7 +1006,7 @@ Token使用统计 [会话ID: {conversation_id}]
                                 if content:
                                     current_content += content
                                 
-                                if DEBUG_MODE == "detail":
+                                if DEBUG_MODE == "Detail":
                                     logger.info(f"转换后的Grok流式响应: {json.dumps(data, ensure_ascii=False)}")
                             
                             # 发送处理后的数据
@@ -1040,16 +1046,23 @@ Token使用统计 [会话ID: {conversation_id}]
                             }
                         })
 
-            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+            except httpx.ConnectError as e:
+                logger.error(f"""
+连接错误 [会话ID: {conversation_id}]
+------------------------
+- 模型: {model_name}
+- 错误类型: {type(e).__name__}
+- 错误信息: {str(e)}
+- 提供商ID: {provider_id}
+------------------------
+""")
                 error_msg = {
                     "error": {
-                        "message": f"请求超时: {str(e)}",
-                        "type": "timeout_error",
-                        "code": 504
+                        "message": f"连接错误: {str(e)}",
+                        "type": "connection_error",
+                        "code": 500
                     }
                 }
-                if DEBUG_MODE:
-                    logger.error(f"流式请求超时: {type(e).__name__}: {str(e)}")
                 yield f"data: {json.dumps(error_msg, ensure_ascii=False)}\n\n".encode('utf-8')
                 yield "data: [DONE]\n\n".encode('utf-8')
             except Exception as e:
