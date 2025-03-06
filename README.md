@@ -1,168 +1,151 @@
-# NexusAI 聚合平台
+# NexusAI API聚合平台
+
+## 📌 项目概述
+NexusAI API聚合平台 是一个轻量级的大语言模型 API 代理服务，专为简化多厂商 LLM API 管理而设计。本服务支持多个 LLM 服务提供商的统一管理，使用统一的接口规范与认证方式，并提供详细的 Token 使用统计。
 
 ## 🌟 核心功能
-- **智能路由**：根据`model`参数自动选择最优服务提供商，支持模型别名映射（如"gpt-4"可映射到不同厂商的实际模型）
-- **统一鉴权**：采用JWT令牌体系，支持多级密钥权限管理（管理员密钥/应用密钥/临时会话密钥）
-- **协议兼容**：完整实现OpenAI API规范，支持同步/流式响应，兼容ChatGPT生态工具
-- **多租户管理**：支持为不同团队创建隔离的密钥空间，实现用量配额和访问控制
-- **实时洞察**：毫秒级监控指标采集，提供Token级成本核算和提供商健康状态分析
 
-## 🛠️ 技术架构
-### 系统拓扑
-```mermaid
-graph TD
-    A[客户端] --> B{API网关}
-    B -->|路由决策| C[提供商代理A]
-    B -->|负载均衡| D[提供商代理B]
-    C --> E[(路由规则库)]
-    D --> E
-    E --> F[服务提供商1]
-    E --> G[服务提供商2]
-    F --> H[模型服务]
-    G --> H
+- **多提供商管理**：统一管理多个 LLM 服务提供商（如 OpenAI、Anthropic 等）及其 API 密钥
+- **模型聚合**：支持每个提供商的多个模型管理
+- **API 代理转发**：遵循 OpenAI API 格式，转发请求到指定的提供商模型
+- **WebSocket 支持**：提供 WebSocket 接口，支持实时交互
+- **Token 统计**：详细记录每次请求的 Token 使用情况
+- **消息存储**：可选择保存请求与响应消息
+- **流式输出支持**：支持 API 的流式响应模式
+
+## 🛠️ 系统架构
+
+本系统包含两个主要应用实例：
+- **管理后台** (app_admin)：运行在 8000 端口，用于提供商和模型管理
+- **API 服务** (app_api)：运行在 5231 端口，用于处理 LLM 请求代理
+
+### 数据模型
+
+```
+服务提供商 (service_providers)
+- id: 提供商唯一标识
+- name: 提供商名称
+- server_url: API 服务器地址
+- server_key: API 密钥
+- personalized_key: 个性化密钥（用于认证）
+- description: 描述信息
+
+提供商模型 (provider_models)
+- id: 模型唯一标识
+- provider_id: 关联的提供商 ID
+- model_name: 模型名称
+- description: 模型描述
 ```
 
-### 核心模块说明
-**main.py**  
-```python
-# 请求处理管线
-async def handle_chat_completions(request: Request):
-    # 1. 请求解析 -> 2. 身份核验 -> 3. 模型解析 -> 4. 提供商选择
-    # 5. 请求适配 -> 6. 流量控制 -> 7. 响应标准化
-    # 全链路埋点追踪，支持跨提供商故障转移
-```
+## 🚀 快速开始
 
-**database.py**  
-```sql
--- 服务商配置表
-CREATE TABLE service_providers (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,  -- 厂商名称
-    endpoint TEXT NOT NULL,     -- API端点
-    api_key TEXT NOT NULL,      -- 加密存储的API密钥
-    weight INTEGER DEFAULT 100, -- 流量权重
-    rate_limit INT DEFAULT 60,  -- 每分钟请求上限
-    is_active BOOLEAN DEFAULT 1 -- 启用状态
-);
+### 环境准备
 
--- 模型路由表
-CREATE TABLE model_routes (
-    model_alias TEXT PRIMARY KEY,  -- 对外暴露的模型名称
-    provider_id INTEGER NOT NULL,  -- 实际服务商ID  
-    real_model_name TEXT NOT NULL, -- 厂商侧真实模型名
-    cost_multiplier FLOAT DEFAULT 1.0 -- 成本系数
-);
-```
-
-## 🚀 部署指南
-### 环境配置
 ```bash
-# 基于Python 3.10+环境
-export NEXUS_SECRET_KEY="your-secure-signing-key"  # JWT签名密钥
-export DB_ENCRYPTION_KEY="database-encryption-key" # 数据库加密密钥
-export MONITORING_PORT=9321  # Prometheus指标暴露端口
-
 # 安装依赖
 pip install -r requirements.txt
 ```
 
-### 服务管理
-```bash
-# 开发模式启动
-python run.py --debug --port 8080
+### 启动服务
 
-# 生产环境部署（使用Gunicorn+Uvicorn）
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker run:app \
-  --bind 0.0.0.0:8080 --timeout 120
+```bash
+# 启动服务
+python run.py
 ```
 
-## 📡 API参考
-### 请求示例
+服务将同时启动：
+- 管理后台：http://localhost:8000
+- API 服务：http://localhost:5231
+
+## 📡 API 参考
+
+### 1. 管理 API
+
+#### 提供商管理
+- `GET /providers` - 获取所有提供商列表
+- `POST /providers` - 创建新的提供商
+- `GET /providers/{provider_id}` - 获取特定提供商信息
+- `PUT /providers/{provider_id}` - 更新提供商信息
+- `DELETE /providers/{provider_id}` - 删除提供商
+
+#### 模型管理
+- `POST /provider_models` - 创建新的模型
+- `GET /providers/{provider_id}/models` - 获取特定提供商的所有模型
+- `GET /provider_models/{model_id}` - 获取特定模型信息
+- `PUT /provider_models/{model_id}` - 更新模型信息
+- `DELETE /provider_models/{model_id}` - 删除模型
+
+#### 统计信息
+- `GET /stats/conversation/{conversation_id}` - 获取特定会话的统计信息
+- `GET /stats/total` - 获取总体统计信息
+
+### 2. LLM API
+
+#### 聊天接口
+- `POST /v1/chat/completions` - 标准聊天完成接口
+- `POST /chat/completions` - 聊天完成接口的别名
+- `WebSocket /ws/chat` - WebSocket 聊天接口
+
+## 🧩 使用示例
+
+### 1. 添加新的服务提供商
+
 ```bash
-curl -X POST "http://localhost:8080/v1/chat/completions" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+curl -X POST "http://localhost:8000/providers" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "nexus-gpt4", 
+    "name": "OpenAI",
+    "server_url": "https://api.openai.com/v1",
+    "server_key": "your-openai-api-key",
+    "personalized_key": "your-custom-key",
+    "description": "OpenAI API 服务"
+  }'
+```
+
+### 2. 添加模型
+
+```bash
+curl -X POST "http://localhost:8000/provider_models" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider_id": 1,
+    "model_name": "gpt-4",
+    "description": "OpenAI GPT-4 模型"
+  }'
+```
+
+### 3. 调用 LLM API
+
+```bash
+curl -X POST "http://localhost:5231/v1/chat/completions" \
+  -H "Authorization: Bearer your-custom-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "max_tokens": 500
   }'
 ```
 
-### 响应结构
-```json
-{
-  "id": "chatcmpl-3Qy4D5eJ5qg6Qb4v",
-  "object": "chat.completion",
-  "created": 1677652288,
-  "model": "nexus-gpt4",
-  "usage": {
-    "prompt_tokens": 15,
-    "completion_tokens": 112,
-    "total_tokens": 127
-  },
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "您好！有什么我可以帮助您的？"
-    },
-    "finish_reason": "stop",
-    "index": 0
-  }]
-}
-```
+## 📊 统计功能
 
-## 🔧 管理控制台
-### 提供商配置
-```yaml
-- name: "Azure OpenAI"
-  endpoint: "https://{resource}.openai.azure.com"
-  api_key: "******"
-  models:
-    - alias: "nexus-gpt4"      # 平台内模型名称
-      real_name: "gpt-4"       # 厂商实际模型名
-      rate_limit: 300          # 每分钟请求上限
-      region_weights:          # 多区域负载配置
-        eastus: 60
-        westus: 40
-```
+系统内置了详细的统计功能，记录：
+- 每次对话的 Token 使用量
+- 按提供商和模型的分类统计
+- 支持查询特定会话的统计数据
 
-### 监控指标
-```prometheus
-# HELP nexus_requests_total Total API requests
-# TYPE nexus_requests_total counter
-nexus_requests_total{provider="azure",model="gpt4",status="200"} 1423
+## 🔍 调试功能
 
-# HELP nexus_latency_seconds API latency distribution
-# TYPE nexus_latency_seconds histogram
-nexus_latency_seconds_bucket{le="0.1"} 89
-nexus_latency_seconds_bucket{le="0.5"} 1234
-```
+服务内置详细的日志功能，日志存储在 `logs` 目录中。
 
-## 🔒 安全架构
-- **密钥管理**：采用AES-256-GCM加密存储，密钥轮换策略每小时自动更新
-- **请求验证**：HMAC签名机制，防止请求篡改
-- **审计日志**：全量记录操作日志，保留180天
-- **漏洞防护**：内置SQL注入/XXE攻击检测模块
+## 📝 注意事项
 
-## 📊 数据看板
-![数据看板示例](https://via.placeholder.com/800x500?text=NexusAI+监控看板)
+- 本服务需要有效的 LLM 服务提供商的 API 密钥
+- 对于 Grok 模型，系统支持通过代理访问
+- 数据库文件存储在 `data` 目录下
+- 聊天记录（如果启用）存储在 `messages` 目录中
 
-- 实时流量热力图
-- 提供商健康状态矩阵
-- 成本分摊分析
-- 异常请求检测
+## 📄 许可证
 
-## 📌 版本路线图
-- v1.3.0 (Q2 2024): 支持Anthropic/Bedrock等更多提供商
-- v1.4.0 (Q3 2024): 添加自动故障转移和熔断机制
-- v2.0.0 (Q4 2024): 实现分布式控制平面
-
-## 📞 支持服务
-```text
-企业级支持:
-- 7x24 紧急响应: +86 400-1234-5678
-- 架构咨询: solutions@nexusai.com
-- 漏洞报告: security@nexusai.com
-```
+[MIT License](LICENSE)
