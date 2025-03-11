@@ -204,8 +204,8 @@ def get_model_by_id(model_id: int):
                WHERE id = ?""", 
             (model_id,)
         )
-        result = cursor.fetchone()
-        return result
+        model = cursor.fetchone()
+        return model
     finally:
         conn.close()
 
@@ -259,5 +259,21 @@ def delete_provider_model(model_id: int):
     except Exception as e:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+def get_all_models():
+    """获取所有模型列表"""
+    conn = sqlite3.connect(str(DATABASE_PATH))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """SELECT pm.id, pm.provider_id, pm.model_name, pm.description, sp.name as provider_name 
+               FROM provider_models pm
+               JOIN service_providers sp ON pm.provider_id = sp.id
+               ORDER BY pm.id"""
+        )
+        models = cursor.fetchall()
+        return models
     finally:
         conn.close()

@@ -8,7 +8,8 @@ from database import (
     init_db, add_service_provider, get_all_providers,
     get_provider_info, delete_provider, update_provider,
     get_provider_by_id, add_provider_model, get_models_by_provider,
-    get_model_by_id, DATABASE_PATH, update_provider_model, delete_provider_model
+    get_model_by_id, DATABASE_PATH, update_provider_model, delete_provider_model,
+    get_all_models
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, Response
@@ -26,6 +27,11 @@ from warnings import filterwarnings
 import time
 import random  # 添加随机模块导入
 from httpx import AsyncClient, AsyncHTTPTransport  # 修改为异步传输类
+import os
+import secrets
+from typing import List, Dict, Any, Optional
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 filterwarnings("ignore", category=DeprecationWarning)
 
@@ -1130,6 +1136,57 @@ async def chat_completions_v1(request: Request):
 async def chat_completions(request: Request):
     """将非版本号请求重定向到 v1 接口"""
     return await handle_chat_completions(request)
+
+@app_api.get("/v1/models")
+async def list_models():
+    """
+    获取所有可用模型列表，返回格式符合OpenAI API规范
+    """
+    try:
+        # 从数据库获取所有模型
+        models_data = get_all_models()
+        
+        # 按照OpenAI格式构建响应
+        formatted_models = []
+        for model in models_data:
+            model_id, provider_id, model_name, description, provider_name = model
+            formatted_models.append({
+                "id": model_name,
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": provider_name,
+                "permission": [
+                    {
+                        "id": f"modelperm-{model_id}",
+                        "object": "model_permission",
+                        "created": int(time.time()),
+                        "allow_create_engine": False,
+                        "allow_sampling": True,
+                        "allow_logprobs": True,
+                        "allow_search_indices": False,
+                        "allow_view": True,
+                        "allow_fine_tuning": False,
+                        "organization": "*",
+                        "group": None,
+                        "is_blocking": False
+                    }
+                ],
+                "root": model_name,
+                "parent": None
+            })
+        
+        return {
+            "object": "list",
+            "data": formatted_models
+        }
+    except Exception as e:
+        logger.error(f"获取模型列表时出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+
+# 添加一个别名路由，不带v1前缀
+@app_api.get("/models")
+async def list_models_alias():
+    return await list_models()
 
 # 添加测试路由
 @app_admin.post("/test")
