@@ -86,6 +86,10 @@ python run.py
 - `POST /chat/completions` - 聊天完成接口的别名
 - `WebSocket /ws/chat` - WebSocket 聊天接口
 
+#### 模型接口
+- `GET /v1/models` - 获取所有可用模型列表（符合OpenAI API格式）
+- `GET /models` - 获取所有可用模型列表的别名接口
+
 ## 🧩 使用示例
 
 ### 1. 添加新的服务提供商
@@ -126,6 +130,46 @@ curl -X POST "http://localhost:5231/v1/chat/completions" \
     "temperature": 0.7,
     "max_tokens": 500
   }'
+```
+
+### 4. 获取可用模型列表
+
+```bash
+curl -X GET "http://localhost:5231/v1/models" \
+  -H "Authorization: Bearer your-custom-key"
+```
+
+响应示例：
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-4",
+      "object": "model",
+      "created": 1677610602,
+      "owned_by": "OpenAI",
+      "permission": [
+        {
+          "id": "modelperm-1",
+          "object": "model_permission",
+          "created": 1677610602,
+          "allow_create_engine": false,
+          "allow_sampling": true,
+          "allow_logprobs": true,
+          "allow_search_indices": false,
+          "allow_view": true,
+          "allow_fine_tuning": false,
+          "organization": "*",
+          "group": null,
+          "is_blocking": false
+        }
+      ],
+      "root": "gpt-4",
+      "parent": null
+    }
+  ]
+}
 ```
 
 ## 📊 统计功能
