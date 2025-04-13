@@ -6,3 +6,7 @@
 /logs
 /test_results
 /config/tokenizer_config.py
+message*.json
+*.pyc
+*.pdf
+default

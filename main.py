@@ -116,9 +116,68 @@ DEBUG_MODE = True  # 可以通过环境变量或配置文件设置
 
 # 修改代理配置为URL字符串格式
 PROXIES = [
-    'http://192.168.88.205:8888',
-    'http://192.168.88.249:7890'
+    'http://100.64.88.205:5678',
+    'http://100.64.88.249:7890'
 ]
+
+# 用于存储可用代理的列表
+AVAILABLE_PROXIES = PROXIES.copy()
+
+# 测试代理可用性的函数
+async def test_proxy_availability():
+    """
+    测试代理可用性，每1分钟执行一次
+    将可用的代理保存到AVAILABLE_PROXIES列表中
+    """
+    global AVAILABLE_PROXIES
+    
+    while True:
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"开始测试代理可用性... [当前时间: {current_time}]")
+        available = []
+        
+        for proxy in PROXIES:
+            try:
+                logger.info(f"测试代理: {proxy}")
+                transport = AsyncHTTPTransport(proxy=proxy)
+                async with AsyncClient(transport=transport, timeout=5.0) as client:
+                    # 使用Google作为测试目标
+                    response = await client.get("https://www.google.com")
+                    if response.status_code == 200:
+                        logger.info(f"代理可用: {proxy}")
+                        available.append(proxy)
+                    else:
+                        logger.warning(f"代理响应异常: {proxy}, 状态码: {response.status_code}")
+            except Exception as e:
+                logger.error(f"代理不可用: {proxy}, 错误: {str(e)}")
+        
+        # 更新可用代理列表
+        if available:
+            AVAILABLE_PROXIES = available
+            logger.info(f"可用代理列表已更新: {AVAILABLE_PROXIES}")
+        else:
+            # 如果没有可用代理，保留原列表
+            logger.warning("没有可用代理!")
+            
+        next_check_time = (datetime.now() + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"代理测试完成，下次测试时间: {next_check_time}")
+        
+        # 等待1分钟
+        await asyncio.sleep(60)
+
+# 在应用启动时启动代理测试任务
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(test_proxy_availability())
+
+# 在其他应用实例上也添加启动事件
+@app_admin.on_event("startup")
+async def admin_startup_event():
+    asyncio.create_task(test_proxy_availability())
+
+@app_api.on_event("startup")
+async def api_startup_event():
+    asyncio.create_task(test_proxy_availability())
 
 # API 路由
 @app_admin.post("/providers")
@@ -570,6 +629,11 @@ async def handle_chat_completions(request: Request):
                 logger.error(f"不支持的模型: {model_name}")
             raise HTTPException(status_code=400, detail="不支持的模型")
         
+        # 检查提供商描述是否包含proxy关键字
+        need_proxy = "proxy" in provider_info.get("description", "").lower()
+        if need_proxy and DEBUG_MODE:
+            logger.info(f"提供商描述包含proxy关键字，将使用代理: {provider_info.get('description')}")
+        
         # 计算并记录发送的prompt tokens
         prompt_tokens = await tokenizer.count_tokens(prompt_text)
         
@@ -604,11 +668,20 @@ Token使用统计 [会话ID: {conversation_id}]
             }
         })
 
-        # 随机选择代理（仅限Grok模型）
-        proxy = random.choice(PROXIES) if is_grok_model else None
+        # 根据条件选择代理
+        proxy = None
+        if need_proxy or is_grok_model:
+            if AVAILABLE_PROXIES:
+                proxy = random.choice(AVAILABLE_PROXIES)
+                logger.info(f"使用代理: {proxy}, 原因: {'provider描述中包含proxy' if need_proxy else 'Grok模型'}")
+            else:
+                logger.warning("需要使用代理但没有可用代理!")
+                # 从原始列表中选择一个，尽管可能不可用
+                proxy = random.choice(PROXIES)
+                logger.warning(f"使用可能不可用的代理: {proxy}")
         
-        # 创建带代理的客户端（仅限Grok模型）
-        client = AsyncClient(transport=AsyncHTTPTransport(proxy=proxy)) if is_grok_model else AsyncClient()
+        # 创建带代理的客户端（根据需要）
+        client = AsyncClient(transport=AsyncHTTPTransport(proxy=proxy)) if proxy else AsyncClient()
         
         # 简化URL构建逻辑
         base_url = provider_info['server_url'].rstrip('/')
@@ -639,9 +712,14 @@ Token使用统计 [会话ID: {conversation_id}]
                 logger.info("使用非流式响应")
             for attempt in range(retry_count):
                 try:
-                    # 创建带代理的异步transport（仅限Grok模型）
-                    if is_grok_model:
-                        proxy_url = random.choice(PROXIES)
+                    # 创建带代理的异步transport（根据需要）
+                    if need_proxy or is_grok_model:
+                        if AVAILABLE_PROXIES:
+                            proxy_url = random.choice(AVAILABLE_PROXIES)
+                            logger.info(f"使用代理: {proxy_url}")
+                        else:
+                            proxy_url = random.choice(PROXIES)
+                            logger.warning(f"使用可能不可用的代理: {proxy_url}")
                         transport = AsyncHTTPTransport(proxy=proxy_url)
                         client = AsyncClient(transport=transport)
                     else:
@@ -860,9 +938,14 @@ Token使用统计 [会话ID: {conversation_id}]
         async def stream_generator():
             current_content = ""
             try:
-                # 创建带代理的异步transport（仅限Grok模型）
-                if is_grok_model:
-                    proxy_url = random.choice(PROXIES)
+                # 创建带代理的异步transport（根据需要）
+                if need_proxy or is_grok_model:
+                    if AVAILABLE_PROXIES:
+                        proxy_url = random.choice(AVAILABLE_PROXIES)
+                        logger.info(f"流式响应使用代理: {proxy_url}")
+                    else:
+                        proxy_url = random.choice(PROXIES)
+                        logger.warning(f"流式响应使用可能不可用的代理: {proxy_url}")
                     transport = AsyncHTTPTransport(proxy=proxy_url)
                     client = AsyncClient(transport=transport)
                 else:

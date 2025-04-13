@@ -4,11 +4,18 @@ import signal
 import sys
 from main import app_admin, app_api
 import logging
+import multiprocessing
+import os
+
+# 获取CPU核心数
+CPU_CORES = multiprocessing.cpu_count()
+# 设置工作进程数，通常为CPU核心数的2-4倍
+WORKERS_PER_APP = CPU_CORES * 2
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(process)d - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -58,7 +65,16 @@ async def run_admin(exit_handler):
         app_admin,
         host="0.0.0.0",
         port=8000,
-        log_level="info"
+        workers=WORKERS_PER_APP,  # 使用多进程
+        loop="uvicorn.loops.auto",  # 自动选择最佳事件循环
+        http="httptools",  # 使用更快的HTTP解析器
+        log_level="info",
+        limit_concurrency=1000,  # 限制并发连接数
+        limit_max_requests=50000,  # 限制最大请求数
+        timeout_keep_alive=30,  # 保持连接超时时间
+        access_log=True,
+        proxy_headers=True,  # 支持代理头
+        forwarded_allow_ips="*",  # 允许所有转发IP
     )
     server = uvicorn.Server(config)
     exit_handler.add_server(server)
@@ -74,7 +90,16 @@ async def run_api(exit_handler):
         app_api,
         host="0.0.0.0",
         port=5231,
-        log_level="info"
+        workers=WORKERS_PER_APP,  # 使用多进程
+        loop="uvicorn.loops.auto",  # 自动选择最佳事件循环
+        http="httptools",  # 使用更快的HTTP解析器
+        log_level="info",
+        limit_concurrency=1000,  # 限制并发连接数
+        limit_max_requests=50000,  # 限制最大请求数
+        timeout_keep_alive=30,  # 保持连接超时时间
+        access_log=True,
+        proxy_headers=True,  # 支持代理头
+        forwarded_allow_ips="*",  # 允许所有转发IP
     )
     server = uvicorn.Server(config)
     exit_handler.add_server(server)
@@ -94,6 +119,19 @@ async def cleanup():
 
 async def main():
     """主函数"""
+    # 设置进程标题
+    try:
+        import setproctitle
+        setproctitle.setproctitle('llm_key_server')
+    except ImportError:
+        pass
+
+    # 设置ulimit（仅在Unix系统上）
+    if sys.platform != 'win32':
+        import resource
+        # 设置最大文件描述符数量
+        resource.setrlimit(resource.RLIMIT_NOFILE, (65535, 65535))
+
     exit_handler = GracefulExit()
     
     try:
@@ -114,6 +152,14 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        # 设置多进程启动方法
+        if sys.platform == 'win32':
+            # Windows 平台使用 spawn
+            multiprocessing.set_start_method('spawn')
+        else:
+            # Unix-like 平台使用 fork
+            multiprocessing.set_start_method('fork')
+
         # 平台特定的事件循环设置
         if sys.platform == 'win32':
             # Windows 平台使用 ProactorEventLoop
