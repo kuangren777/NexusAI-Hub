@@ -1907,114 +1907,6 @@
             });
         });
 
-        // 添加刷新数据库内容的函数
-        async function refreshDatabaseContent() {
-            try {
-                // 显示加载状态
-                document.querySelectorAll('.loading-overlay').forEach(overlay => {
-                    overlay.style.display = 'flex';
-                });
-
-                // 获取提供商数据
-                const providersResponse = await fetch('/providers');
-                const providersData = await providersResponse.json();
-                
-                // 更新提供商表格
-                const providerTbody = document.querySelector("#providerTable tbody");
-                providerTbody.innerHTML = providersData.providers.map((provider, index) => {
-                    const serverUrl = provider[2];
-                    const displayUrl = truncateText(serverUrl);
-                    const displayDesc = truncateText(provider[5]);
-                    
-                    return `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>${provider[1]}</td>
-                            <td title="${serverUrl}">${displayUrl}</td>
-                            <td>${provider[4]}</td>
-                            <td title="${provider[5] || ''}">${displayDesc}</td>
-                            <td>
-                                <button class="action-button edit-button" onclick="editProvider(${provider[0]})">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-button delete-button" onclick="deleteProvider(${provider[0]})">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-
-                // 获取并更新模型表格
-                const modelTbody = document.querySelector("#modelTable tbody");
-                if (modelTbody) {
-                    modelTbody.innerHTML = '';
-                    let modelCounter = 1;
-                    
-                    for (const provider of providersData.providers) {
-                        try {
-                            const modelsResponse = await fetch(`/providers/${provider[0]}/models`);
-                            if (!modelsResponse.ok) {
-                                console.error(`获取提供商 ${provider[1]} 的模型失败:`, modelsResponse.statusText);
-                                continue;
-                            }
-                            
-                            const modelsData = await modelsResponse.json();
-                            if (!modelsData.models || !Array.isArray(modelsData.models)) continue;
-                            
-                            const modelRows = modelsData.models.map(model => {
-                                const modelName = model[2].replace(/'/g, "\\'"); // 转义单引号
-                                const displayModelName = truncateText(model[2], 30);  // 模型名称保持较长的显示
-                                const displayDesc = truncateText(model[3], 20);  // 描述使用较短的显示
-                                
-                                return `
-                                    <tr>
-                                        <td>${modelCounter++}</td>
-                                        <td>${provider[1]}</td>
-                                        <td title="${modelName}" class="copyable" onclick="copyToClipboard('${modelName}', this)">
-                                            ${displayModelName}
-                                        </td>
-                                        <td title="${model[3] || ''}">${displayDesc}</td>
-                                        <td>
-                                            <button class="action-button edit-button" onclick="editModel(${model[0]})">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="action-button delete-button" onclick="deleteModel(${model[0]})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('');
-                            
-                            modelTbody.innerHTML += modelRows;
-                        } catch (error) {
-                            console.error(`处理提供商 ${provider[1]} 的模型时出错:`, error);
-                        }
-                    }
-                }
-
-                // 更新聊天界面的提供商选择框
-                const chatProviderSelect = document.getElementById('chatProvider');
-                if (chatProviderSelect) {
-                    chatProviderSelect.innerHTML = providersData.providers.map(provider => 
-                        `<option value="${provider[0]}">${provider[1]}</option>`
-                    ).join('');
-                    // 触发一次更新模型选择框
-                    await updateChatKeys();
-                }
-
-            } catch (error) {
-                console.error('刷新数据失败:', error);
-                showResponse("刷新数据失败: " + error.message, false);
-            } finally {
-                // 隐藏加载状态
-                document.querySelectorAll('.loading-overlay').forEach(overlay => {
-                    overlay.style.display = 'none';
-                });
-            }
-        }
-
         // 确保模态框结构存在
         document.body.insertAdjacentHTML('beforeend', `
             <div id="editModal" class="modal">
@@ -2067,66 +1959,6 @@
         `;
         document.head.appendChild(style);
 
-        // 修改 WebSocket 连接函数
-        function connectWebSocket() {
-            return new Promise((resolve, reject) => {
-                try {
-                    // 如果已经存在连接，先关闭
-                    if (ws && ws.readyState !== WebSocket.CLOSED) {
-                        ws.close(1000, "Normal closure");
-                    }
-                    
-                    ws = new WebSocket(`ws://${window.location.host}/ws/chat`);
-                    
-                    ws.onopen = () => {
-                        console.log('WebSocket已连接');
-                        resolve();
-                    };
-                    
-                    ws.onerror = (error) => {
-                        console.error('WebSocket错误:', error);
-                        appendMessage('error', 'WebSocket连接错误');
-                        reject(error);
-                    };
-                    
-                    ws.onclose = (event) => {
-                        console.log('WebSocket已断开, 代码:', event.code, '原因:', event.reason);
-                        // 只有在非正常关闭时才显示断开消息
-                        if (event.code !== 1000 && event.code !== 1001) {
-                            appendMessage('error', '连接已断开，正在尝试重新连接...');
-                            // 添加重连逻辑
-                            setTimeout(() => {
-                                connectWebSocket().catch(console.error);
-                            }, 3000);
-                        }
-                    };
-                    
-                    ws.onmessage = (event) => {
-                        try {
-                            console.log('收到WebSocket消息:', event.data);
-                            const data = JSON.parse(event.data);
-                            
-                            if (data.error) {
-                                appendMessage('error', data.error);
-                                currentAiMessage = null;
-                                return;
-                            }
-                            
-                            if (data.type === 'message' && data.content) {
-                                appendMessage('ai', data.content);
-                            }
-                        } catch (error) {
-                            console.error('处理消息错误:', error);
-                            appendMessage('error', '处理消息时出错: ' + error.message);
-                            currentAiMessage = null;
-                        }
-                    };
-                } catch (error) {
-                    console.error('创建WebSocket错误:', error);
-                    reject(error);
-                }
-            });
-        }
 
         // 修改发送消息函数
         async function sendMessage() {
@@ -2776,10 +2608,6 @@
             });
         }
 
-        // 模态框操作
-        function showAddProviderModal() {
-            document.getElementById('addProviderModal').style.display = 'block';
-        }
 
         function showAddModelModal() {
             // 在显示模态框之前，先加载提供商列表
@@ -2885,23 +2713,6 @@
             }
         });
 
-        // 删除操作
-        async function deleteProvider(id) {
-            if (!confirm('确定要删除这个提供商吗？相关的模型也会被删除。')) return;
-            
-            try {
-                const response = await fetch(`/providers/${id}`, {
-                    method: 'DELETE'
-                });
-                
-                if (!response.ok) throw new Error('删除失败');
-                
-                showResponse('提供商删除成功', true);
-                await refreshDatabaseContent();
-            } catch (error) {
-                showResponse('删除失败: ' + error.message, false);
-            }
-        }
 
         // 编辑提供商
         async function editProvider(id) {
